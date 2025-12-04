@@ -7,4 +7,9 @@ services:
       - "8585:8585"
     volumes:
        - ./volumes:/app/volumes
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_ENDPOINT: ${DB_ENDPOINT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
     restart: unless-stopped
