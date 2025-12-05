@@ -243,19 +243,34 @@ public class BankApiController {
         }
     }
     
-    @Scheduled(fixedRate = 86400000)
+    @Scheduled(fixedRate = 86400000, initialDelay = 60000)
     public void scheduledInterestApplication() {
-        applyInterestToAllLoans();
+        try {
+            applyInterestToAllLoans();
+        } catch (Exception e) {
+            System.err.println("Scheduled interest application failed: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+            }
+        }
     }
     
     @PostMapping("/newLoanAmountInterest")
     public String applyInterestToAllLoans() {
-        List<Bank> allBanks = bankJpaRepository.findAll();
-        for (Bank bank : allBanks) {
-            bank.setLoanAmount(bank.getLoanAmount() * 1.05);
+        try {
+            List<Bank> allBanks = bankJpaRepository.findAll();
+            if (allBanks.isEmpty()) {
+                return "No banks found to apply interest to.";
+            }
+            for (Bank bank : allBanks) {
+                bank.setLoanAmount(bank.getLoanAmount() * 1.05);
+            }
+            bankJpaRepository.saveAll(allBanks);
+            return "Applied 5% interest to all loan amounts.";
+        } catch (Exception e) {
+            System.err.println("Error applying interest: " + e.getMessage());
+            throw e;
         }
-        bankJpaRepository.saveAll(allBanks);
-        return "Applied 5% interest to all loan amounts.";
     }
 
     // MODIFIED - Now creates bank if not found

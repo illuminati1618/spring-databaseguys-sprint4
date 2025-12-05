@@ -47,61 +47,75 @@ public class MiningService {
     public static final double ELECTRICITY_RATE = 0.12; // USD per kWh
     public static final double BTC_PRICE = 45000.0;
 
-    @Scheduled(fixedRate = MINING_INTERVAL)
+    @Scheduled(fixedRate = MINING_INTERVAL, initialDelay = 60000)
     @Transactional
     public void processMining() {
-        System.out.println("\n=== Mining Process Started ===");
-        
-        List<MiningUser> activeMiners = miningUserRepository.findAll().stream()
-            .filter(user -> user.isMining() && !user.getActiveGPUs().isEmpty())
-            .collect(Collectors.toList());
+        try {
+            System.out.println("\n=== Mining Process Started ===");
+            
+            List<MiningUser> activeMiners = miningUserRepository.findAll().stream()
+                .filter(user -> user.isMining() && !user.getActiveGPUs().isEmpty())
+                .collect(Collectors.toList());
 
-        activeMiners.forEach(miner -> {
-            double hashrate = miner.getCurrentHashrate();
-            
-            if (hashrate > 0) {
-                // Calculate mining reward
-                double btcMined = hashrate * HASH_TO_BTC_RATE / 60.0;
-                
-                // Convert BTC to USD
-                double usdMined = btcMined * BTC_PRICE;
-                
-                // Update BTC balance
-                miner.setPendingBalance(miner.getPendingBalance() + btcMined);
-                
-                // Update Person's USD balance
-                Person person = miner.getPerson();
-                String uid = person.getUid();
-                Bank bank = bankRepository.findByUid(uid);
-                double currentBalance = bank.getBalance();
-                bank.setBalance(currentBalance + usdMined, "cryptomining");
-                bankRepository.save(bank);
-                
-                // Update mining stats
-                miner.setTotalBtcEarned(miner.getTotalBtcEarned() + btcMined);
-                miner.setShares(miner.getShares() + 1);
-                miner.setTotalSharesMined(miner.getTotalSharesMined() + 1);
-                
-                System.out.println(String.format("Miner %s earned %.8f BTC (%.2f USD)", 
-                    miner.getPerson().getEmail(), btcMined, usdMined));
+            activeMiners.forEach(miner -> {
+                try {
+                    double hashrate = miner.getCurrentHashrate();
+                    
+                    if (hashrate > 0) {
+                        // Calculate mining reward
+                        double btcMined = hashrate * HASH_TO_BTC_RATE / 60.0;
+                        
+                        // Convert BTC to USD
+                        double usdMined = btcMined * BTC_PRICE;
+                        
+                        // Update BTC balance
+                        miner.setPendingBalance(miner.getPendingBalance() + btcMined);
+                        
+                        // Update Person's USD balance
+                        Person person = miner.getPerson();
+                        String uid = person.getUid();
+                        Bank bank = bankRepository.findByUid(uid);
+                        if (bank != null) {
+                            double currentBalance = bank.getBalance();
+                            bank.setBalance(currentBalance + usdMined, "cryptomining");
+                            bankRepository.save(bank);
+                        }
+                        
+                        // Update mining stats
+                        miner.setTotalBtcEarned(miner.getTotalBtcEarned() + btcMined);
+                        miner.setShares(miner.getShares() + 1);
+                        miner.setTotalSharesMined(miner.getTotalSharesMined() + 1);
+                        
+                        System.out.println(String.format("Miner %s earned %.8f BTC (%.2f USD)", 
+                            miner.getPerson().getEmail(), btcMined, usdMined));
+                    }
+                    
+                    miningUserRepository.save(miner);
+                } catch (Exception e) {
+                    System.err.println("Error processing miner " + miner.getPerson().getEmail() + ": " + e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            System.err.println("Mining process failed: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
             }
-            
-            miningUserRepository.save(miner);
-        });
+        }
     }
 
-    @Scheduled(fixedRate = BALANCE_TRANSFER_INTERVAL)
+    @Scheduled(fixedRate = BALANCE_TRANSFER_INTERVAL, initialDelay = 60000)
     @Transactional
     public void processPendingBalances() {
-        System.out.println("\n=== Processing Pending Balances ===");
-        
-        List<MiningUser> miners = miningUserRepository.findAll();
-        System.out.println("Found " + miners.size() + " total miners");
-        
-        miners.forEach(miner -> {
-            double pending = miner.getPendingBalance();
-            if (pending > 0) {
-                try {
+        try {
+            System.out.println("\n=== Processing Pending Balances ===");
+            
+            List<MiningUser> miners = miningUserRepository.findAll();
+            System.out.println("Found " + miners.size() + " total miners");
+            
+            miners.forEach(miner -> {
+                double pending = miner.getPendingBalance();
+                if (pending > 0) {
+                    try {
                     // First, transfer BTC from pending to confirmed
                     double currentConfirmed = miner.getBtcBalance();
                     double newConfirmed = currentConfirmed + pending;
@@ -136,6 +150,12 @@ public class MiningService {
                 }
             }
         });
+        } catch (Exception e) {
+            System.err.println("Process pending balances failed: " + e.getMessage());
+            if (e.getCause() != null) {
+                System.err.println("Cause: " + e.getCause().getMessage());
+            }
+        }
     }
 
     public Map<String, Object> buyGPU(MiningUser user, Long gpuId) {
