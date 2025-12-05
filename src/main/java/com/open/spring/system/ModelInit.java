@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import org.springframework.boot.CommandLineRunner;
@@ -103,53 +105,55 @@ public class ModelInit {
     @Transactional
     CommandLineRunner run() {
         return args -> {
-            // Ensure unified `adventure` table exists before any seeding
+            boolean isMySQL = false;
             try {
                 if (dataSource != null) {
-                    try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
-                        String create = "CREATE TABLE IF NOT EXISTS adventure ("
-                                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                                + "person_id INTEGER,"
-                                + "person_uid TEXT,"
-                                + "question_id INTEGER,"
-                                + "question_title TEXT,"
-                                + "question_content TEXT,"
-                                + "question_category TEXT,"
-                                + "question_points INTEGER,"
-                                + "choice_id INTEGER,"
-                                + "choice_text TEXT,"
-                                + "choice_is_correct INTEGER,"
-                                + "answer_is_correct INTEGER,"
-                                + "answer_content TEXT,"
-                                + "chat_score INTEGER,"
-                                + "rubric_ruid TEXT,"
-                                + "rubric_criteria TEXT,"
-                                + "balance REAL,"
-                                + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
-                                + ");";
-                        st.execute(create);
-                        System.out.println("Ensured 'adventure' table exists");
-                        // Seed default adventure rows if none exist (instantiate in code)
-                        try {
-                            long advCount = 0L;
-                            try { advCount = adventureJpaRepository.count(); } catch (Exception ignore) { advCount = 0L; }
-                            if (advCount == 0L) {
-                                Adventure[] defaults = Adventure.init();
-                                for (Adventure a : defaults) {
-                                    try { adventureJpaRepository.save(a); } catch (Exception ignored) {}
-                                }
-                                System.out.println("Seeded default Adventure rows via Adventure.init()");
-                            }
-                        } catch (Throwable t) {
-                            // don't fail startup for seeding issues
+                    try (Connection conn = dataSource.getConnection()) {
+                        DatabaseMetaData metaData = conn.getMetaData();
+                        String dbProduct = metaData.getDatabaseProductName().toLowerCase();
+                        isMySQL = dbProduct.contains("mysql");
+                        if (isMySQL) {
+                            System.out.println("MySQL detected - skipping manual table creation (Hibernate will handle it)");
                         }
                     }
                 }
             } catch (SQLException e) {
-                System.err.println("Failed to ensure 'adventure' table: " + e.getMessage());
+                System.err.println("Could not determine database type: " + e.getMessage());
             }
 
-                // Ensure unified `games` table exists before any seeding
+            // Only create tables manually for SQLite (MySQL uses Hibernate ddl-auto=update)
+            if (!isMySQL) {
+                try {
+                    if (dataSource != null) {
+                        try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
+                            String create = "CREATE TABLE IF NOT EXISTS adventure ("
+                                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                    + "person_id INTEGER,"
+                                    + "person_uid TEXT,"
+                                    + "question_id INTEGER,"
+                                    + "question_title TEXT,"
+                                    + "question_content TEXT,"
+                                    + "question_category TEXT,"
+                                    + "question_points INTEGER,"
+                                    + "choice_id INTEGER,"
+                                    + "choice_text TEXT,"
+                                    + "choice_is_correct INTEGER,"
+                                    + "answer_is_correct INTEGER,"
+                                    + "answer_content TEXT,"
+                                    + "chat_score INTEGER,"
+                                    + "rubric_ruid TEXT,"
+                                    + "rubric_criteria TEXT,"
+                                    + "balance REAL,"
+                                    + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
+                                    + ");";
+                            st.execute(create);
+                            System.out.println("Ensured 'adventure' table exists");
+                        }
+                    }
+                } catch (SQLException e) {
+                    System.err.println("Failed to ensure 'adventure' table: " + e.getMessage());
+                }
+
                 try {
                     if (dataSource != null) {
                         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
@@ -169,23 +173,39 @@ public class ModelInit {
                                     + ");";
                             st.execute(createGames);
                             System.out.println("Ensured 'games' table exists");
-                            try {
-                                long gameCount = 0L;
-                                try { gameCount = gameJpaRepository.count(); } catch (Exception ignore) { gameCount = 0L; }
-                                if (gameCount == 0L) {
-                                    Game[] defaults = Game.init();
-                                    for (Game g : defaults) {
-                                        try { gameJpaRepository.save(g); } catch (Exception ignored) {}
-                                    }
-                                    System.out.println("Seeded default Game rows via Game.init()");
-                                }
-                            } catch (Throwable t) {
-                            }
                         }
                     }
                 } catch (SQLException e) {
                     System.err.println("Failed to ensure 'games' table: " + e.getMessage());
                 }
+            }
+
+            try {
+                long advCount = 0L;
+                try { advCount = adventureJpaRepository.count(); } catch (Exception ignore) { advCount = 0L; }
+                if (advCount == 0L) {
+                    Adventure[] defaults = Adventure.init();
+                    for (Adventure a : defaults) {
+                        try { adventureJpaRepository.save(a); } catch (Exception ignored) {}
+                    }
+                    System.out.println("Seeded default Adventure rows via Adventure.init()");
+                }
+            } catch (Throwable t) {
+                // don't fail startup for seeding issues
+            }
+            try {
+                long gameCount = 0L;
+                try { gameCount = gameJpaRepository.count(); } catch (Exception ignore) { gameCount = 0L; }
+                if (gameCount == 0L) {
+                    Game[] defaults = Game.init();
+                    for (Game g : defaults) {
+                        try { gameJpaRepository.save(g); } catch (Exception ignored) {}
+                    }
+                    System.out.println("Seeded default Game rows via Game.init()");
+                }
+            } catch (Throwable t) {
+                // don't fail startup for seeding issues
+            }
 
             if (new File("volumes/.skip-modelinit").exists()) {
                 System.out.println("Skip flag detected, ModelInit will not run");
@@ -214,9 +234,8 @@ public class ModelInit {
                     }
                     person.setRoles(updatedRoles);
                     
-                    // Ensure password is not null or empty
                     if (person.getPassword() == null || person.getPassword().isEmpty()) {
-                        person.setPassword("defaultPassword123"); // Set a default password or handle differently
+                        person.setPassword("defaultPassword123"); 
                     }
                     
                     personDetailsService.save(person);
@@ -234,10 +253,6 @@ public class ModelInit {
                     announcementJPA.save(new Announcement(announcement.getAuthor(), announcement.getTitle(), announcement.getBody(), announcement.getTags())); // JPA save
                 }
             }
-            // Adventure sub-APIs have been merged into a single Adventure table/entity.
-
-
-
             
             List<Comment> Comments = Comment.init();
             for (Comment Comment : Comments) {
