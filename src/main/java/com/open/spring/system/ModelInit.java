@@ -81,6 +81,8 @@ public class ModelInit {
     @Autowired
     DataSource dataSource;
     @Autowired
+    DatabaseConfig databaseConfig;
+    @Autowired
     AdventureJpaRepository adventureJpaRepository;
     @Autowired
     UnifiedGameRepository gameJpaRepository;
@@ -177,27 +179,58 @@ public class ModelInit {
                         System.out.println("Conservative database cleanup complete!");
                         // ========== DATABASE CLEANUP - END ==========
 
-
-                        String create = "CREATE TABLE IF NOT EXISTS adventure ("
-                                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                                + "person_id INTEGER,"
-                                + "person_uid TEXT,"
-                                + "question_id INTEGER,"
-                                + "question_title TEXT,"
-                                + "question_content TEXT,"
-                                + "question_category TEXT,"
-                                + "question_points INTEGER,"
-                                + "choice_id INTEGER,"
-                                + "choice_text TEXT,"
-                                + "choice_is_correct INTEGER,"
-                                + "answer_is_correct INTEGER,"
-                                + "answer_content TEXT,"
-                                + "chat_score INTEGER,"
-                                + "rubric_ruid TEXT,"
-                                + "rubric_criteria TEXT,"
-                                + "balance REAL,"
-                                + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
-                                + ");";
+                        // Build database-specific CREATE TABLE statement for adventure
+                        // Note: For MySQL, Hibernate will auto-create tables from JPA entities (ddl-auto=update)
+                        //       but we still run CREATE TABLE IF NOT EXISTS as a safety net.
+                        //       For SQLite, we must create tables manually since ddl-auto=none.
+                        String create;
+                        if (databaseConfig.isMySQL()) {
+                            // MySQL syntax
+                            create = "CREATE TABLE IF NOT EXISTS adventure ("
+                                    + "id INT AUTO_INCREMENT PRIMARY KEY,"
+                                    + "person_id INT,"
+                                    + "person_uid TEXT,"
+                                    + "question_id INT,"
+                                    + "question_title TEXT,"
+                                    + "question_content TEXT,"
+                                    + "question_category TEXT,"
+                                    + "question_points INT,"
+                                    + "choice_id INT,"
+                                    + "choice_text TEXT,"
+                                    + "choice_is_correct INT,"
+                                    + "answer_is_correct INT,"
+                                    + "answer_content TEXT,"
+                                    + "chat_score INT,"
+                                    + "rubric_ruid TEXT,"
+                                    + "rubric_criteria TEXT,"
+                                    + "balance DOUBLE,"
+                                    + "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                                    + "details TEXT"
+                                    + ");";
+                        } else {
+                            // SQLite syntax
+                            create = "CREATE TABLE IF NOT EXISTS adventure ("
+                                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                    + "person_id INTEGER,"
+                                    + "person_uid TEXT,"
+                                    + "question_id INTEGER,"
+                                    + "question_title TEXT,"
+                                    + "question_content TEXT,"
+                                    + "question_category TEXT,"
+                                    + "question_points INTEGER,"
+                                    + "choice_id INTEGER,"
+                                    + "choice_text TEXT,"
+                                    + "choice_is_correct INTEGER,"
+                                    + "answer_is_correct INTEGER,"
+                                    + "answer_content TEXT,"
+                                    + "chat_score INTEGER,"
+                                    + "rubric_ruid TEXT,"
+                                    + "rubric_criteria TEXT,"
+                                    + "balance REAL,"
+                                    + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),"
+                                    + "details TEXT"
+                                    + ");";
+                        }
                         st.execute(create);
                         System.out.println("Ensured 'adventure' table exists");
                         // Seed default adventure rows if none exist (instantiate in code)
@@ -212,13 +245,16 @@ public class ModelInit {
                                 System.out.println("Seeded default Adventure rows via Adventure.init()");
                             }
                             // Ensure 'details' column exists and migrate existing columns into JSON 'details'
-                            try {
+                            // Note: For MySQL, 'details' column is already included in CREATE TABLE above
+                            // For SQLite, we need to add it if it doesn't exist
+                            if (!databaseConfig.isMySQL()) {
                                 try {
                                     st.execute("ALTER TABLE adventure ADD COLUMN details TEXT;");
                                     System.out.println("Added 'details' column to 'adventure' table");
                                 } catch (SQLException ignore) {
                                     // column may already exist; ignore
                                 }
+                            }
                                 try {
                                     // Migrate existing Adventure rows into details JSON if empty
                                     Iterable<Adventure> all = adventureJpaRepository.findAll();
@@ -259,23 +295,47 @@ public class ModelInit {
             }
 
                 // Ensure unified `games` table exists before any seeding
+                // Note: For MySQL, Hibernate will auto-create tables from JPA entities (ddl-auto=update)
+                //       but we still run CREATE TABLE IF NOT EXISTS as a safety net.
+                //       For SQLite, we must create tables manually since ddl-auto=none.
                 try {
                     if (dataSource != null) {
                         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
-                            String createGames = "CREATE TABLE IF NOT EXISTS games ("
-                                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                                    + "person_id INTEGER,"
-                                    + "person_uid TEXT,"
-                                    + "type TEXT,"
-                                    + "tx_id TEXT,"
-                                    + "bet_amount REAL,"
-                                    + "amount REAL,"
-                                    + "balance REAL,"
-                                    + "result TEXT,"
-                                    + "success INTEGER,"
-                                    + "details TEXT,"
-                                    + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
-                                    + ");";
+                            // Build database-specific CREATE TABLE statement for games
+                            String createGames;
+                            if (databaseConfig.isMySQL()) {
+                                // MySQL syntax
+                                createGames = "CREATE TABLE IF NOT EXISTS games ("
+                                        + "id INT AUTO_INCREMENT PRIMARY KEY,"
+                                        + "person_id INT,"
+                                        + "person_uid TEXT,"
+                                        + "type TEXT,"
+                                        + "tx_id TEXT,"
+                                        + "bet_amount DOUBLE,"
+                                        + "amount DOUBLE,"
+                                        + "balance DOUBLE,"
+                                        + "result TEXT,"
+                                        + "success INT,"
+                                        + "details TEXT,"
+                                        + "created_at DATETIME DEFAULT CURRENT_TIMESTAMP"
+                                        + ");";
+                            } else {
+                                // SQLite syntax
+                                createGames = "CREATE TABLE IF NOT EXISTS games ("
+                                        + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                        + "person_id INTEGER,"
+                                        + "person_uid TEXT,"
+                                        + "type TEXT,"
+                                        + "tx_id TEXT,"
+                                        + "bet_amount REAL,"
+                                        + "amount REAL,"
+                                        + "balance REAL,"
+                                        + "result TEXT,"
+                                        + "success INTEGER,"
+                                        + "details TEXT,"
+                                        + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
+                                        + ");";
+                            }
                             st.execute(createGames);
                             System.out.println("Ensured 'games' table exists");
                             try {
