@@ -1,12 +1,14 @@
 package com.open.spring.mvc.dbFix;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.autoconfigure.orm.jpa.JpaProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+import javax.sql.DataSource;
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,23 +27,35 @@ public class DatabaseConfigListener {
     
     @Bean
     @Primary
-    public DataSourceProperties dataSourceProperties() {
-        DataSourceProperties properties = new DataSourceProperties();
-        
-        // Set all properties explicitly
-        properties.setUrl(datasourceUrl);
-        properties.setUsername(datasourceUsername);
-        properties.setPassword(datasourcePassword);
-        
-        // Set driver class name based on URL
+    public DataSource dataSource() {
+        // Determine driver class name based on URL
+        String driverClassName;
         if (datasourceUrl != null && datasourceUrl.startsWith("jdbc:mysql")) {
-            properties.setDriverClassName("com.mysql.cj.jdbc.Driver");
+            driverClassName = "com.mysql.cj.jdbc.Driver";
         } else {
             // Default to SQLite
-            properties.setDriverClassName("org.sqlite.JDBC");
+            driverClassName = "org.sqlite.JDBC";
         }
         
-        return properties;
+        // Build DataSource with correct driver
+        DataSourceBuilder<?> builder = DataSourceBuilder.create();
+        builder.driverClassName(driverClassName);
+        builder.url(datasourceUrl);
+        builder.username(datasourceUsername);
+        builder.password(datasourcePassword);
+        
+        // Configure HikariCP properties for MySQL (SQLite doesn't use connection pooling the same way)
+        if (datasourceUrl != null && datasourceUrl.startsWith("jdbc:mysql")) {
+            HikariDataSource dataSource = (HikariDataSource) builder.build();
+            dataSource.setConnectionTimeout(60000);
+            dataSource.setMaximumPoolSize(5);
+            dataSource.setMinimumIdle(5);
+            dataSource.setValidationTimeout(3000);
+            dataSource.setMaxLifetime(1800000);
+            return dataSource;
+        }
+        
+        return builder.build();
     }
     
     @Bean
