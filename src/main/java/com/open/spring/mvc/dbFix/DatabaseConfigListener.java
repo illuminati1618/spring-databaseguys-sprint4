@@ -71,9 +71,8 @@ public class DatabaseConfigListener {
             // MySQL configuration
             // Use update to auto-create tables if they don't exist (safe - only creates, doesn't drop)
             hibernateProps.put("hibernate.hbm2ddl.auto", "update");
-            // Configure MySQL-specific type mappings
-            hibernateProps.put("hibernate.type.preferred_instant_jdbc_type", "TIMESTAMP");
-            hibernateProps.put("hibernate.type.preferred_uuid_jdbc_type", "VARCHAR");
+            // Configure Hibernate to automatically quote identifiers for MySQL (handles reserved keywords like 'groups')
+            hibernateProps.put("hibernate.globally_quoted_identifiers", "true");
         } else {
             // SQLite configuration (default, including when datasourceUrl is null/undefined)
             hibernateProps.put("hibernate.dialect", "org.hibernate.community.dialect.SQLiteDialect");
