@@ -27,10 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.open.spring.mvc.groups.GroupsJpaRepository;
-import com.open.spring.mvc.groups.Submitter;
 import com.open.spring.mvc.person.Person;
 import com.open.spring.mvc.person.PersonJpaRepository;
-import com.open.spring.mvc.person.PersonApiController.PersonDto;
 
 import jakarta.transaction.Transactional;
 import lombok.Getter;

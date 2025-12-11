@@ -1,7 +1,5 @@
 package com.open.spring.mvc.person;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,12 +27,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.open.spring.mvc.userStocks.UserStocksRepository;
-import com.open.spring.mvc.userStocks.userStocksTable;
 
-import jakarta.transaction.Transactional;
 import lombok.Getter;
 import lombok.Setter;
 

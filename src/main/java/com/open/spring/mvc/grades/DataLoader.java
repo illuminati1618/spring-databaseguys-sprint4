@@ -20,11 +20,11 @@ public class DataLoader implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         // Sample Grades
-        gradeRepository.save(new Grade("STU001", "Mathematics", 85.5, "A"));
-        gradeRepository.save(new Grade("STU001", "Science", 92.0, "A+"));
-        gradeRepository.save(new Grade("STU002", "Mathematics", 78.0, "B+"));
-        gradeRepository.save(new Grade("STU002", "English", 88.5, "A-"));
-        gradeRepository.save(new Grade("STU003", "Science", 95.0, "A+"));
+        gradeRepository.save(new Grade("STU001", "Mathematics", 85.5, "A", "submission link"));
+        gradeRepository.save(new Grade("STU001", "Science", 92.0, "A+", "submission link"));
+        gradeRepository.save(new Grade("STU002", "Mathematics", 78.0, "B+", "submission link"));
+        gradeRepository.save(new Grade("STU002", "English", 88.5, "A-", "submission link"));
+        gradeRepository.save(new Grade("STU003", "Science", 95.0, "A+", "submission link"));
 
         // Sample Progress
         progressRepository.save(new Progress("STU001", "Mathematics", 75.0, "In Progress"));

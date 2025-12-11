@@ -1,0 +1,123 @@
+<!DOCTYPE HTML>
+<html xmlns:layout="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org"
+      layout:decorate="~{layouts/base}" lang="en">
+
+<!-- Page Style -->
+<th:block layout:fragment="style" th:remove="tag">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css" />
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .modal-content {
+            background-color: #1b1c1a;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 800px;
+        }
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</th:block>
+
+<!-- Page Title -->
+<th:block layout:fragment="title" th:remove="tag">Certificate Manager</th:block>
+
+<!-- Page Body -->
+<th:block layout:fragment="body" th:remove="tag">
+    <div class="container">
+        <h1>Certificate Manager</h1>
+        <button class="btn" onclick="showAddCertificateModal()">+ Add Certificate</button>
+
+        <!-- Add Certificate Modal -->
+        <div id="addCertificateModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeAddCertificateModal()">&times;</span>
+                <h2>Add New Certificate</h2>
+                <form th:action="@{/mvc/certificates/create}" method="post">
+                    <label>Title: <input type="text" name="title" required></label><br>
+                    <button type="submit" class="btn">Submit</button>
+                    <button type="button" class="btn" onclick="closeAddCertificateModal()">Cancel</button>
+                </form>
+            </div>
+        </div>
+
+        <table id="certificateTable" class="display">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Date Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="cert : ${certificates}">
+                    <td th:text="${cert.id}"></td>
+                    <td th:text="${cert.title}"></td>
+                    <td th:text="${#dates.format(cert.dateCreated, 'yyyy-MM-dd')}"></td>
+                    <td>
+                        <form th:action="@{'/mvc/certificates/delete/' + ${cert.id}}" method="post" onsubmit="return confirm('Are you sure?');">
+                            <button type="submit" class="btn btn-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</th:block>
+
+<!-- Page Scripts -->
+<th:block layout:fragment="script" th:remove="tag">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#certificateTable').DataTable();
+        });
+
+        function showAddCertificateModal() {
+            document.getElementById('addCertificateModal').style.display = 'block';
+        }
+
+        function closeAddCertificateModal() {
+            document.getElementById('addCertificateModal').style.display = 'none';
+        }
+    </script>
+</th:block>
+
+</html>

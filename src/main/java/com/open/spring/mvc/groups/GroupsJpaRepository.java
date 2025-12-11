@@ -1,16 +1,11 @@
 package com.open.spring.mvc.groups;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.data.jpa.repository.JpaRepository;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.open.spring.mvc.person.Person;
 
 public interface GroupsJpaRepository extends JpaRepository<Groups, Long> {
     
@@ -32,4 +27,11 @@ public interface GroupsJpaRepository extends JpaRepository<Groups, Long> {
     // Find groups with a specific number of members
     @Query("SELECT g FROM Groups g WHERE SIZE(g.groupMembers) = :memberCount")
     List<Groups> findGroupsByMemberCount(@Param("memberCount") int memberCount);
+    
+    // Get raw member data for a group (avoids Hibernate hydration issues)
+    @Query(value = "SELECT p.id, p.uid, p.name, p.email FROM group_members gm " +
+                   "JOIN person p ON gm.person_id = p.id " +
+                   "WHERE gm.group_id = :groupId " +
+                   "ORDER BY p.id", nativeQuery = true)
+    List<Object[]> findGroupMembersRaw(@Param("groupId") Long groupId);
 }

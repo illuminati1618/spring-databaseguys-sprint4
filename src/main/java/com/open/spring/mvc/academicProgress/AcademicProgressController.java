@@ -1,12 +1,15 @@
 package com.open.spring.mvc.academicProgress;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.csv.CSVFormat;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -16,6 +19,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,9 +29,8 @@ import smile.data.DataFrame;
 import smile.data.Tuple;
 import smile.data.formula.Formula;
 import smile.data.vector.BaseVector;
+import smile.data.vector.DoubleVector;
 import smile.data.vector.IntVector;
-import smile.data.vector.StringVector;
-import smile.io.Read;
 import smile.regression.RandomForest;
 
 @RestController
@@ -42,8 +47,7 @@ public class AcademicProgressController {
     private JdbcTemplate jdbcTemplate;
 
     private RandomForest model;
-    private Map<String, Map<String, Integer>> encoders;
-
+    private HashMap<Object, Object> encoders;
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -51,7 +55,12 @@ public class AcademicProgressController {
         private String assignmentType;
         private String difficultyLevel;
         private String topic;
+        private String completionStatus;
+        private Integer hoursStudied;
+        private Integer attendance;
     }
+
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @GetMapping("/train")
     public ResponseEntity<?> train() {
@@ -59,67 +68,88 @@ public class AcademicProgressController {
             String sql = "CREATE TABLE IF NOT EXISTS academic_progress (" +
                          "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                          "student_id INTEGER, " +
-                         "assignment_id TEXT, " +
-                         "score INTEGER, " +
-                         "max_score INTEGER, " +
-                         "submission_date TEXT, " +
-                         "due_date TEXT, " +
-                         "completion_status TEXT, " +
-                         "assignment_type TEXT, " +
-                         "difficulty_level TEXT, " +
-                         "topic TEXT)";
+                         "assignment_completion_rate REAL, " +
+                         "average_assignment_score REAL, " +
+                         "collegeboard_quiz_average REAL, " +
+                         "office_hours_visits INTEGER, " +
+                         "conduct INTEGER, " +
+                         "work_habit INTEGER, " +
+                         "github_contributions INTEGER, " +
+                         "final_grade INTEGER)";
             jdbcTemplate.execute(sql);
 
-            String csvPath = "src/main/java/com/open/spring/mvc/academicProgress/fake-records.csv";
+            String jsonPath = "src/main/java/com/open/spring/mvc/academicProgress/fake-records-new.json";
+            File jsonFile = new File(jsonPath);
+            JsonNode rootNodeFromFile = objectMapper.readTree(jsonFile);
             
-            DataFrame data = Read.csv(csvPath, CSVFormat.DEFAULT.withFirstRecordAsHeader());
+            int n = rootNodeFromFile.size();
+            double[] assignmentCompletionRate = new double[n];
+            double[] averageAssignmentScore = new double[n];
+            double[] collegeboardQuizAverage = new double[n];
+            int[] officeHoursVisits = new int[n];
+            int[] conduct = new int[n];
+            int[] workHabit = new int[n];
+            int[] githubContributions = new int[n];
+            int[] finalGrade = new int[n];
 
-            if (repository.count() == 0) {
-                List<AcademicProgress> records = new ArrayList<>();
-                for (int i = 0; i < data.nrows(); i++) {
-                    Tuple row = data.get(i);
+            List<AcademicProgress> records = new ArrayList<>();
+            boolean saveToDb = repository.count() == 0;
+
+            for (int i = 0; i < n; i++) {
+                JsonNode node = rootNodeFromFile.get(i);
+                
+                assignmentCompletionRate[i] = node.path("assignment_completion_rate").asDouble();
+                averageAssignmentScore[i] = node.path("average_assignment_score").asDouble();
+                collegeboardQuizAverage[i] = node.path("collegeboard_quiz_average").asDouble();
+                officeHoursVisits[i] = node.path("office_hours_visits").asInt();
+                conduct[i] = node.path("conduct").asInt();
+                workHabit[i] = node.path("work_habit").asInt();
+                githubContributions[i] = node.path("github_contributions").asInt();
+                finalGrade[i] = node.path("final_grade").asInt();
+
+                if (saveToDb) {
                     AcademicProgress ap = new AcademicProgress();
-                    ap.setStudentId(((Number) row.getAs("student_id")).longValue());
-                    ap.setAssignmentId(row.getString("assignment_id"));
-                    ap.setScore(((Number) row.getAs("score")).intValue());
-                    ap.setMaxScore(((Number) row.getAs("max_score")).intValue());
-                    ap.setSubmissionDate(row.getString("submission_date"));
-                    ap.setDueDate(row.getString("due_date"));
-                    ap.setCompletionStatus(row.getString("completion_status"));
-                    ap.setAssignmentType(row.getString("assignment_type"));
-                    ap.setDifficultyLevel(row.getString("difficulty_level"));
-                    ap.setTopic(row.getString("topic"));
+                    ap.setStudentId(node.path("student_id").asLong());
+                    ap.setAssignmentCompletionRate(assignmentCompletionRate[i]);
+                    ap.setAverageAssignmentScore(averageAssignmentScore[i]);
+                    ap.setCollegeboardQuizAverage(collegeboardQuizAverage[i]);
+                    ap.setOfficeHoursVisits(officeHoursVisits[i]);
+                    ap.setConduct(conduct[i]);
+                    ap.setWorkHabit(workHabit[i]);
+                    ap.setGithubContributions(githubContributions[i]);
+                    ap.setFinalGrade(finalGrade[i]);
                     records.add(ap);
                 }
+            }
+            
+            if (saveToDb) {
                 repository.saveAll(records);
             }
 
-            data = data.select("score", "assignment_type", "difficulty_level", "topic", "completion_status");
+            DataFrame data = DataFrame.of(
+                DoubleVector.of("assignment_completion_rate", assignmentCompletionRate),
+                DoubleVector.of("average_assignment_score", averageAssignmentScore),
+                DoubleVector.of("collegeboard_quiz_average", collegeboardQuizAverage),
+                IntVector.of("office_hours_visits", officeHoursVisits),
+                IntVector.of("conduct", conduct),
+                IntVector.of("work_habit", workHabit),
+                IntVector.of("github_contributions", githubContributions),
+                IntVector.of("final_grade", finalGrade)
+            );
+
+            System.out.println("DataFrame BEFORE:");
+            System.out.println(data.toString());
+            data = data.select("final_grade", "assignment_completion_rate", "average_assignment_score", 
+                             "collegeboard_quiz_average", "office_hours_visits", "conduct", 
+                             "work_habit", "github_contributions");
+
+
+            System.out.println("DataFrame AFTER:");
+            System.out.println(data.toString());
 
             this.encoders = new HashMap<>();
 
-            String[] stringCols = {"assignment_type", "difficulty_level", "topic", "completion_status"};
-            
-            for (String col : stringCols) {
-                StringVector vec = data.stringVector(col);
-                int[] encoded = new int[vec.size()];
-                Map<String, Integer> map = new HashMap<>();
-                int id = 0;
-                
-                for (int i = 0; i < vec.size(); i++) {
-                    String val = vec.get(i);
-                    if (!map.containsKey(val)) {
-                        map.put(val, id++);
-                    }
-                    encoded[i] = map.get(val);
-                }
-                
-                encoders.put(col, map);
-
-                data = data.drop(col).merge(IntVector.of(col, encoded));
-            }
-
-            Formula formula = Formula.lhs("score");
+            Formula formula = Formula.lhs("final_grade");
             
             this.model = RandomForest.fit(formula, data);
 
@@ -130,8 +160,7 @@ public class AcademicProgressController {
                 "model_type", "RandomForest Regression"
             ));
 
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (IOException | DataAccessException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Training failed: " + e.getMessage()));
         }
@@ -139,7 +168,7 @@ public class AcademicProgressController {
 
     @PostMapping("/predict")
     public ResponseEntity<?> predict(@RequestBody Map<String, Object> features) {
-        if (model == null || encoders == null) {
+        if (model == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", "Model not trained. Call /train first."));
         }
@@ -147,56 +176,55 @@ public class AcademicProgressController {
         try {
             String sql = "CREATE TABLE IF NOT EXISTS academic_prediction (" +
                          "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                         "assignment_type TEXT, " +
-                         "difficulty_level TEXT, " +
-                         "topic TEXT, " +
-                         "completion_status TEXT, " +
+                         "assignment_completion_rate REAL, " +
+                         "average_assignment_score REAL, " +
+                         "collegeboard_quiz_average REAL, " +
+                         "office_hours_visits INTEGER, " +
+                         "conduct INTEGER, " +
+                         "work_habit INTEGER, " +
+                         "github_contributions INTEGER, " +
                          "predicted_score REAL, " +
                          "created_at INTEGER)";
             jdbcTemplate.execute(sql);
 
-            String[] featureNames = {"assignment_type", "difficulty_level", "topic", "completion_status"};
+            String[] numericFeatures = {"assignment_completion_rate", "average_assignment_score", 
+                                       "collegeboard_quiz_average", "office_hours_visits", 
+                                       "conduct", "work_habit", "github_contributions"};
             
-            BaseVector[] vectors = new BaseVector[featureNames.length];
+            List<BaseVector> vectors = new ArrayList<>();
 
-            for (int i = 0; i < featureNames.length; i++) {
-                String col = featureNames[i];
-                String val = (String) features.get(col);
-
+            for (String col : numericFeatures) {
+                Number val = (Number) features.get(col);
                 if (val == null) {
                     return ResponseEntity.badRequest().body(Map.of("error", "Missing feature: " + col));
                 }
-
-                if (!encoders.containsKey(col) || !encoders.get(col).containsKey(val)) {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Unknown value for feature '" + col + "': " + val));
-                }
-
-                int encodedVal = encoders.get(col).get(val);
-                vectors[i] = IntVector.of(col, new int[]{ encodedVal });
+                vectors.add(DoubleVector.of(col, new double[]{ val.doubleValue() }));
             }
 
-            DataFrame singleRow = DataFrame.of(vectors);
+            DataFrame singleRow = DataFrame.of(vectors.toArray(BaseVector[]::new));
             Tuple instance = singleRow.stream().findFirst().orElseThrow();
 
             double prediction = model.predict(instance);
 
             AcademicPrediction record = new AcademicPrediction(
-                (String) features.get("assignment_type"),
-                (String) features.get("difficulty_level"),
-                (String) features.get("topic"),
-                (String) features.get("completion_status"),
+                ((Number) features.get("assignment_completion_rate")).doubleValue(),
+                ((Number) features.get("average_assignment_score")).doubleValue(),
+                ((Number) features.get("collegeboard_quiz_average")).doubleValue(),
+                ((Number) features.get("office_hours_visits")).intValue(),
+                ((Number) features.get("conduct")).intValue(),
+                ((Number) features.get("work_habit")).intValue(),
+                ((Number) features.get("github_contributions")).intValue(),
                 prediction
             );
             predictionRepository.save(record);
 
             return ResponseEntity.ok(Map.of(
-                "predicted_score", prediction,
+                "predicted_final_grade", prediction,
                 "status", "success",
                 "prediction_id", record.getId()
             ));
 
-        } catch (Exception e) {
-            e.printStackTrace();
+        } catch (DataAccessException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Prediction failed: " + e.getMessage()));
         }

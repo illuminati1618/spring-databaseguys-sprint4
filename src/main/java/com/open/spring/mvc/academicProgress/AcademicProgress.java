@@ -18,20 +18,12 @@ public class AcademicProgress {
     private Long id;
 
     private Long studentId;
-    private String assignmentId;
-    private Integer score;
-    private Integer maxScore;
-    private String submissionDate;
-    private String dueDate;
-    private String completionStatus;
-    private String assignmentType;
-    private String difficultyLevel;
-    private String topic;
-
-    public AcademicProgress(Long studentId, String assignmentId, Integer score, String topic) {
-        this.studentId = studentId;
-        this.assignmentId = assignmentId;
-        this.score = score;
-        this.topic = topic;
-    }
+    private Double assignmentCompletionRate;
+    private Double averageAssignmentScore;
+    private Double collegeboardQuizAverage;
+    private Integer officeHoursVisits;
+    private Integer conduct;
+    private Integer workHabit;
+    private Integer githubContributions;
+    private Integer finalGrade;
 }

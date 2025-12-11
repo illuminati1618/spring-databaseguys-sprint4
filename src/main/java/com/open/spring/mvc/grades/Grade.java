@@ -1,6 +1,11 @@
 package com.open.spring.mvc.grades;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "grades")
@@ -15,24 +20,26 @@ public class Grade {
     @Column(nullable = false)
     private String assignment;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Double score;
 
     @Column(name = "class")
     @com.fasterxml.jackson.annotation.JsonProperty("class")
     private String course;
 
-    // @Column(nullable = false)
-    // private String gradeLevel;
+    @Column(nullable = true)
+    private String submission;
+
 
     public Grade() {
     }
 
-    public Grade(String uid, String assignment, Double score, String course) {
+    public Grade(String uid, String assignment, Double score, String course, String submission) {
         this.uid = uid;
         this.assignment = assignment;
         this.score = score;
         this.course = course;
+        this.submission = submission;
         // this.gradeLevel = gradeLevel;
     }
 
@@ -76,8 +83,13 @@ public class Grade {
         this.course = course;
     }
 
-    // public String getGradeLevel() { return gradeLevel; }
-    // public void setGradeLevel(String gradeLevel) { this.gradeLevel = gradeLevel;
-    // }
+    public String getSubmission() {
+        return submission;
+    }
+
+    public void setSubmission(String submission) {
+        this.submission = submission;
+    }
+
 
 }
