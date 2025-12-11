@@ -31,7 +31,6 @@ public class TrainStation {
     private TrainCompany company;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
     private Map<String,List<Product>> products; //Product, amount available
 
     @Min(value=-10000)

@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import org.springframework.boot.CommandLineRunner;
@@ -80,6 +82,30 @@ public class ModelInit {
     @Autowired IssueJPARepository issueJPARepository;
     @Autowired
     DataSource dataSource;
+    
+    @Value("${spring.datasource.url:}")
+    private String datasourceUrl;
+    
+    /**
+     * Detect if we're using MySQL or SQLite based on the datasource URL
+     */
+    private boolean isMySQL() {
+        return datasourceUrl != null && datasourceUrl.startsWith("jdbc:mysql");
+    }
+    
+    /**
+     * Get the auto-increment syntax based on database type
+     */
+    private String getAutoIncrementSyntax() {
+        return isMySQL() ? "AUTO_INCREMENT" : "AUTOINCREMENT";
+    }
+    
+    /**
+     * Get the default timestamp syntax based on database type
+     */
+    private String getDefaultTimestamp() {
+        return isMySQL() ? "CURRENT_TIMESTAMP" : "(strftime('%Y-%m-%d %H:%M:%f','now'))";
+    }
     @Autowired
     AdventureJpaRepository adventureJpaRepository;
     @Autowired
@@ -105,6 +131,31 @@ public class ModelInit {
             try {
                 if (dataSource != null) {
                     try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
+                        // ========== DATABASE CLEANUP - DISABLED ==========
+                        // Database cleanup has been disabled to prevent dropping tables on every startup
+                        // Uncomment the section below and set ENABLE_DB_CLEANUP=true to enable cleanup
+                        /*
+                        if ("true".equalsIgnoreCase(System.getenv("ENABLE_DB_CLEANUP"))) {
+                            System.out.println("Starting conservative database cleanup...");
+                            
+                            // 1. Drop User tables (0 rows, 0 code references)
+                            try {
+                                st.execute("DROP TABLE IF EXISTS user;");
+                                st.execute("DROP TABLE IF EXISTS user_seq;");
+                                System.out.println("Dropped 'user' tables");
+                            } catch (SQLException e) {
+                                System.out.println("WARNING: Could not drop user tables");
+                            }
+                            
+                            // 2. Drop responses table (0 rows, 0 code references)
+                            try {
+                                st.execute("DROP TABLE IF EXISTS responses;");
+                                System.out.println("Dropped 'responses' table");
+                            } catch (SQLException e) {
+                                System.out.println("WARNING: Could not drop responses table");
+                            }
+                            
+                            // 3. Drop student table (0 rows, 0 code references)
                         // ========== DATABASE CLEANUP - START ==========
                         System.out.println("Starting database cleanup...");
                         
@@ -168,18 +219,61 @@ public class ModelInit {
                         int droppedAuditTables = 0;
                         for (String tableName : auditTables) {
                             try {
-                                st.execute("DROP TABLE IF EXISTS " + tableName + ";");
-                                droppedAuditTables++;
-                            } catch (SQLException ignored) {}
+                                st.execute("DROP TABLE IF EXISTS student;");
+                                System.out.println("Dropped 'student' table");
+                            } catch (SQLException e) {
+                                System.out.println("WARNING: Could not drop student table");
+                            }
+                            
+                            // 4. Drop person_user_mapping tables (0 rows, 0 code references)
+                            try {
+                                st.execute("DROP TABLE IF EXISTS person_user_mapping;");
+                                st.execute("DROP TABLE IF EXISTS person_user_mapping_seq;");
+                                System.out.println("Dropped 'person_user_mapping' tables");
+                            } catch (SQLException e) {
+                                System.out.println("WARNING: Could not drop person_user_mapping tables");
+                            }
+                            
+                            // 5. Drop assignment_queue table (0 rows, migrated to JSON)
+                            try {
+                                st.execute("DROP TABLE IF EXISTS assignment_queue;");
+                                st.execute("DROP TABLE IF EXISTS assignment_queue_seq;");
+                                System.out.println("Dropped 'assignment_queue' tables");
+                            } catch (SQLException e) {
+                                System.out.println("WARNING: Could not drop assignment_queue tables");
+                            }
+                            
+                            // 6. Drop orphaned Hibernate Envers audit tables (0 @Audited annotations)
+                            String[] auditTables = {
+                                "HTE_announcement", "HTE_assignment", "HTE_assignment_queue",
+                                "HTE_assignment_submission", "HTE_bank", "HTE_bathroom_queue",
+                                "HTE_blackjack", "HTE_comment", "HTE_game", "HTE_gemini",
+                                "HTE_groups", "HTE_hall_pass", "HTE_issue", "HTE_jokes",
+                                "HTE_note", "HTE_person", "HTE_person_role", "HTE_person_user_mapping",
+                                "HTE_plant", "HTE_progress_bar", "HTE_quiz_scores", "HTE_resume",
+                                "HTE_student_queue", "HTE_synergy_grade", "HTE_synergy_grade_request",
+                                "HTE_tasks", "HTE_teacher", "HTE_teacher_grading_team_teach",
+                                "HTE_tinkle", "HTE_train", "HTE_user", "HTE_user_stocks_table",
+                                "HT_groups", "HT_person", "HT_submitter"
+                            };
+                            
+                            int droppedAuditTables = 0;
+                            for (String tableName : auditTables) {
+                                try {
+                                    st.execute("DROP TABLE IF EXISTS " + tableName + ";");
+                                    droppedAuditTables++;
+                                } catch (SQLException ignored) {}
+                            }
+                            System.out.println("Dropped " + droppedAuditTables + " orphaned audit tables");
+                            
+                            System.out.println("Conservative database cleanup complete!");
                         }
-                        System.out.println("Dropped " + droppedAuditTables + " orphaned audit tables");
-                        
-                        System.out.println("Conservative database cleanup complete!");
+                        */
                         // ========== DATABASE CLEANUP - END ==========
 
 
                         String create = "CREATE TABLE IF NOT EXISTS adventure ("
-                                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                + "id INTEGER PRIMARY KEY " + getAutoIncrementSyntax() + ","
                                 + "person_id INTEGER,"
                                 + "person_uid TEXT,"
                                 + "question_id INTEGER,"
@@ -196,7 +290,7 @@ public class ModelInit {
                                 + "rubric_ruid TEXT,"
                                 + "rubric_criteria TEXT,"
                                 + "balance REAL,"
-                                + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
+                                + "created_at DATETIME DEFAULT " + getDefaultTimestamp()
                                 + ");";
                         st.execute(create);
                         System.out.println("Ensured 'adventure' table exists");
@@ -263,7 +357,7 @@ public class ModelInit {
                     if (dataSource != null) {
                         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
                             String createGames = "CREATE TABLE IF NOT EXISTS games ("
-                                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                    + "id INTEGER PRIMARY KEY " + getAutoIncrementSyntax() + ","
                                     + "person_id INTEGER,"
                                     + "person_uid TEXT,"
                                     + "type TEXT,"
@@ -274,7 +368,7 @@ public class ModelInit {
                                     + "result TEXT,"
                                     + "success INTEGER,"
                                     + "details TEXT,"
-                                    + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
+                                    + "created_at DATETIME DEFAULT " + getDefaultTimestamp()
                                     + ");";
                             st.execute(createGames);
                             System.out.println("Ensured 'games' table exists");

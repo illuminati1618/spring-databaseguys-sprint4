@@ -147,7 +147,6 @@ public class Person extends Submitter implements Comparable<Person> {
      * }
      */
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
     private Map<String, Map<String, Object>> stats = new HashMap<>();
 
 

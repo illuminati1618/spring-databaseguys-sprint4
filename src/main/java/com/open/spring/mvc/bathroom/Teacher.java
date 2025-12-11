@@ -72,7 +72,6 @@ public class Teacher {
             }
         */
         @JdbcTypeCode(SqlTypes.JSON)
-        @Column(columnDefinition = "jsonb")
         private Map<String,Map<String, Object>> stats = new HashMap<>(); 
         
     

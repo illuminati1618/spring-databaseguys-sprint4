@@ -38,7 +38,6 @@ public class Train {
     private Float position;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
     private Map<String,List<Product>> cargo; //Product, amount available
 
     

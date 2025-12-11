@@ -60,17 +60,14 @@ public class Bank {
     
     // Track transaction history for ML features
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
     private Map<String, List<List<Object>>> profitMap = new HashMap<>();
     
     // Store ML feature importance for explainability
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
     private Map<String, Double> featureImportance = new HashMap<>();
 
     // Track NPC progress
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
     private LinkedHashMap<String, Boolean> npcProgress = new LinkedHashMap<>();
 
     public Bank(Person person) {
