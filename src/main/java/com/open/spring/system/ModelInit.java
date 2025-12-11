@@ -6,8 +6,10 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import org.springframework.boot.CommandLineRunner;
@@ -80,6 +82,30 @@ public class ModelInit {
     @Autowired IssueJPARepository issueJPARepository;
     @Autowired
     DataSource dataSource;
+    
+    @Value("${spring.datasource.url:}")
+    private String datasourceUrl;
+    
+    /**
+     * Detect if we're using MySQL or SQLite based on the datasource URL
+     */
+    private boolean isMySQL() {
+        return datasourceUrl != null && datasourceUrl.startsWith("jdbc:mysql");
+    }
+    
+    /**
+     * Get the auto-increment syntax based on database type
+     */
+    private String getAutoIncrementSyntax() {
+        return isMySQL() ? "AUTO_INCREMENT" : "AUTOINCREMENT";
+    }
+    
+    /**
+     * Get the default timestamp syntax based on database type
+     */
+    private String getDefaultTimestamp() {
+        return isMySQL() ? "CURRENT_TIMESTAMP" : "(strftime('%Y-%m-%d %H:%M:%f','now'))";
+    }
     @Autowired
     AdventureJpaRepository adventureJpaRepository;
     @Autowired
@@ -179,7 +205,7 @@ public class ModelInit {
 
 
                         String create = "CREATE TABLE IF NOT EXISTS adventure ("
-                                + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                + "id INTEGER PRIMARY KEY " + getAutoIncrementSyntax() + ","
                                 + "person_id INTEGER,"
                                 + "person_uid TEXT,"
                                 + "question_id INTEGER,"
@@ -196,7 +222,7 @@ public class ModelInit {
                                 + "rubric_ruid TEXT,"
                                 + "rubric_criteria TEXT,"
                                 + "balance REAL,"
-                                + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
+                                + "created_at DATETIME DEFAULT " + getDefaultTimestamp()
                                 + ");";
                         st.execute(create);
                         System.out.println("Ensured 'adventure' table exists");
@@ -263,7 +289,7 @@ public class ModelInit {
                     if (dataSource != null) {
                         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
                             String createGames = "CREATE TABLE IF NOT EXISTS games ("
-                                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                                    + "id INTEGER PRIMARY KEY " + getAutoIncrementSyntax() + ","
                                     + "person_id INTEGER,"
                                     + "person_uid TEXT,"
                                     + "type TEXT,"
@@ -274,7 +300,7 @@ public class ModelInit {
                                     + "result TEXT,"
                                     + "success INTEGER,"
                                     + "details TEXT,"
-                                    + "created_at DATETIME DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))"
+                                    + "created_at DATETIME DEFAULT " + getDefaultTimestamp()
                                     + ");";
                             st.execute(createGames);
                             System.out.println("Ensured 'games' table exists");
