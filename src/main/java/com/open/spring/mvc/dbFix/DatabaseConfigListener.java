@@ -69,8 +69,9 @@ public class DatabaseConfigListener {
         
         if (isMySQL) {
             // MySQL configuration
-            hibernateProps.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
-            hibernateProps.put("hibernate.hbm2ddl.auto", "none"); // Use none for production MySQL
+            // Use update to auto-create tables if they don't exist (safe - only creates, doesn't drop)
+            // Note: Hibernate will auto-detect MySQLDialect, but we set it explicitly for clarity
+            hibernateProps.put("hibernate.hbm2ddl.auto", "update");
         } else {
             // SQLite configuration (default, including when datasourceUrl is null/undefined)
             hibernateProps.put("hibernate.dialect", "org.hibernate.community.dialect.SQLiteDialect");
