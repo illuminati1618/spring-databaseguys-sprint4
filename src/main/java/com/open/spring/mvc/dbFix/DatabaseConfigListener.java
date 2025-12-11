@@ -70,8 +70,10 @@ public class DatabaseConfigListener {
         if (isMySQL) {
             // MySQL configuration
             // Use update to auto-create tables if they don't exist (safe - only creates, doesn't drop)
-            // Note: Hibernate will auto-detect MySQLDialect, but we set it explicitly for clarity
             hibernateProps.put("hibernate.hbm2ddl.auto", "update");
+            // Configure MySQL-specific type mappings
+            hibernateProps.put("hibernate.type.preferred_instant_jdbc_type", "TIMESTAMP");
+            hibernateProps.put("hibernate.type.preferred_uuid_jdbc_type", "VARCHAR");
         } else {
             // SQLite configuration (default, including when datasourceUrl is null/undefined)
             hibernateProps.put("hibernate.dialect", "org.hibernate.community.dialect.SQLiteDialect");
