@@ -15,6 +15,10 @@ public interface GroupsJpaRepository extends JpaRepository<Groups, Long> {
     // Find all groups
     List<Groups> findAll();
     List<Groups> findAllByOrderByNameAsc();
+
+    // Eagerly load members to avoid LazyInitialization in views
+    @Query("SELECT DISTINCT g FROM Groups g LEFT JOIN FETCH g.groupMembers gm ORDER BY g.id")
+    List<Groups> findAllWithMembers();
     
     // Find groups containing a specific person by uid
     @Query("SELECT g FROM Groups g JOIN g.groupMembers p WHERE p.uid = :personUid")
@@ -23,6 +27,9 @@ public interface GroupsJpaRepository extends JpaRepository<Groups, Long> {
     // Find groups containing a specific person by id
     @Query("SELECT g FROM Groups g JOIN g.groupMembers p WHERE p.id = :personId")
     List<Groups> findGroupsByPersonId(@Param("personId") Long personId);
+
+    @Query("SELECT DISTINCT g FROM Groups g LEFT JOIN FETCH g.groupMembers gm WHERE EXISTS (SELECT 1 FROM g.groupMembers p WHERE p.id = :personId) ORDER BY g.id")
+    List<Groups> findGroupsByPersonIdWithMembers(@Param("personId") Long personId);
     
     // Find groups with a specific number of members
     @Query("SELECT g FROM Groups g WHERE SIZE(g.groupMembers) = :memberCount")

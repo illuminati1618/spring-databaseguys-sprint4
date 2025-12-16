@@ -1,0 +1,225 @@
+<!DOCTYPE HTML>
+<html xmlns:layout="http://www.w3.org/1999/xhtml" xmlns:th="http://www.w3.org/1999/xhtml"
+    layout:decorate="~{layouts/base}" lang="en">
+
+
+<!-- page style -->
+<th:block layout:fragment="style" th:remove="tag">
+    <style>
+        .small-cell { white-space: nowrap; }
+        .wrap-cell { max-width: 320px; word-break: break-word; }
+    </style>
+</th:block>
+
+<!-- page title -->
+<th:block layout:fragment="title" th:remove="tag">Assignments List</th:block>
+
+<th:block layout:fragment="body" th:remove="tag">
+    <div sec:authorize="hasAnyRole('ROLE_ADMIN', 'ROLE_TEACHER')">
+        <div class="container">
+
+            <h3>Assignments Viewer</h3>
+
+            <div class="row align-items-md-stretch table-responsive">
+            <table id="assignmentsTable" class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>ID#</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Due Date</th>
+                        <th>Points</th>
+                        <th>Created</th>
+                        <th>Action</th>
+                        <th>Import/Export</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="assignment : ${list}">
+                        <td class="small-cell" th:text="${assignment.id}">ID</td>
+                        <td class="small-cell" th:text="${assignment.name}">Name</td>
+                        <td class="small-cell" th:text="${assignment.type}">Type</td>
+                        <td class="wrap-cell" th:text="${assignment.description}">Description</td>
+                        <td class="small-cell" th:text="${assignment.dueDate}">Due Date</td>
+                        <td class="small-cell" th:text="${assignment.points}">Points</td>
+                        <td class="small-cell" th:text="${assignment.timestamp}">Created</td>
+                        <td>
+                            <a th:href="@{/mvc/assignments/tracker}" class="btn btn-primary btn-sm">Open Tracker</a>
+                            <form th:action="@{/api/assignments/delete/{id}(id=${assignment.id})}" method="post" style="display:inline;">
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this assignment?')">Delete</button>
+                            </form>
+                        </td>
+                        <td>
+                            <button class="btn btn-info btn-sm" th:attr="data-id=${assignment.id}" onclick="exportRow(this)">Export</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-3">
+            <a class="btn btn-primary" th:href="@{/mvc/assignments/tracker}">Assignment Tracker</a>
+            <button class="btn btn-success" onclick="exportCSV()">Export CSV</button>
+            <button class="btn btn-info" onclick="document.getElementById('csvFileInput').click()">Import CSV</button>
+            <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+        </div>
+
+</div>
+    <div sec:authorize="!hasAnyRole('ROLE_ADMIN', 'ROLE_TEACHER')" class="container">
+        <div class="alert alert-danger">Access denied: teachers and administrators only.</div>
+    </div>
+</th:block>
+
+<!-- scripts -->
+<th:block layout:fragment="script" th:remove="tag">
+    <script>
+        function exportRow(btn) {
+            const id = btn.getAttribute('data-id');
+            fetch('/api/assignments/' + id)
+                .then(res => res.json())
+                .then(data => {
+                    const s = JSON.stringify(data, null, 2);
+                    const blob = new Blob([s], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'assignment-' + id + '.json'; a.click();
+                    URL.revokeObjectURL(url);
+                })
+                .catch(e => alert('Export failed: ' + e));
+        }
+
+        function exportCSV() {
+            const table = document.getElementById('assignmentsTable');
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+
+            // Get headers
+            const headers = [];
+            rows[0].querySelectorAll('th').forEach((th, index) => {
+                if (index < rows[0].querySelectorAll('th').length - 2) { // Exclude last 2 columns (Action, Import/Export)
+                    headers.push(th.textContent.trim());
+                }
+            });
+            csv.push(headers.join(','));
+
+            // Get data rows
+            for (let i = 1; i < rows.length; i++) {
+                const row = [];
+                const cols = rows[i].querySelectorAll('td');
+                for (let j = 0; j < cols.length - 2; j++) { // Exclude last 2 columns
+                    let cell = cols[j].textContent.trim();
+                    // Escape commas and quotes
+                    if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+                        cell = '"' + cell.replace(/"/g, '""') + '"';
+                    }
+                    row.push(cell);
+                }
+                csv.push(row.join(','));
+            }
+
+            // Download CSV
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'assignments.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+
+                if (lines.length < 2) {
+                    alert('CSV file is empty or invalid');
+                    return;
+                }
+
+                // Parse CSV and create assignments
+                const headers = lines[0].split(',').map(h => h.trim());
+                let imported = 0;
+                let failed = 0;
+
+                const promises = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].trim() === '') continue;
+
+                    const values = parseCSVLine(lines[i]);
+                    const assignment = {};
+
+                    headers.forEach((header, index) => {
+                        if (values[index] !== undefined && values[index] !== '') {
+                            assignment[header] = values[index];
+                        }
+                    });
+
+                    // Send to backend API
+                    const promise = fetch('/api/assignments/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(assignment)
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            imported++;
+                        } else {
+                            failed++;
+                        }
+                    })
+                    .catch(error => {
+                        failed++;
+                        console.error('Error importing row:', error);
+                    });
+
+                    promises.push(promise);
+                }
+
+                Promise.all(promises).then(() => {
+                    alert(`Import complete! Imported: ${imported}, Failed: ${failed}`);
+                    location.reload();
+                });
+            };
+
+            reader.readAsText(file);
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+    </script>
+</th:block>
+
+</html>

@@ -79,7 +79,20 @@ public class ImportationViewController {
             personToUpdate.setName(person.getName());
         }
         if (person.getEmail() != null && !person.getEmail().isBlank() && !person.getEmail().equals(personToUpdate.getEmail())) {
+            // Check if email is already taken by another person
+            Person personWithEmail = personJpaRepository.findByEmail(person.getEmail());
+            if (personWithEmail != null && !personWithEmail.getId().equals(personToUpdate.getId())) {
+                return new ResponseEntity<String>("Person with email '" + person.getEmail() + "' already exists", HttpStatus.CONFLICT);
+            }
             personToUpdate.setEmail(person.getEmail());
+        }
+        if (person.getUid() != null && !person.getUid().isBlank() && !person.getUid().equals(personToUpdate.getUid())) {
+            // Check if uid is already taken by another person
+            Person personWithUid = personJpaRepository.findByUid(person.getUid());
+            if (personWithUid != null && !personWithUid.getId().equals(personToUpdate.getId())) {
+                return new ResponseEntity<String>("Person with uid '" + person.getUid() + "' already exists", HttpStatus.CONFLICT);
+            }
+            personToUpdate.setUid(person.getUid());
         }
         if (person.getKasmServerNeeded() != null && !person.getKasmServerNeeded().equals(personToUpdate.getKasmServerNeeded())) {
             personToUpdate.setKasmServerNeeded(person.getKasmServerNeeded());
@@ -111,6 +124,16 @@ public class ImportationViewController {
             }
         }
        
+        // Check if a person with this uid already exists
+        if (personEmpty.getUid() != null && personJpaRepository.existsByUid(personEmpty.getUid())) {
+            return new ResponseEntity<String>("Person with uid '" + personEmpty.getUid() + "' already exists", HttpStatus.CONFLICT);
+        }
+
+        // Check if a person with this email already exists
+        if (personEmpty.getEmail() != null && personJpaRepository.existsByEmail(personEmpty.getEmail())) {
+            return new ResponseEntity<String>("Person with email '" + personEmpty.getEmail() + "' already exists", HttpStatus.CONFLICT);
+        }
+
         Person temp = new Person();
             temp.setUid(personEmpty.getUid());
             temp.setPassword(personEmpty.getPassword());
@@ -149,17 +172,21 @@ public class ImportationViewController {
     private boolean buildBatchAndSave(List<PersonEmpty> personEmptiesSubList) {
         ArrayList<Person> persons = new ArrayList<Person>(0);
         personEmptiesSubList.stream().forEach(personEmpty -> {
-            //create an actual person from the personEmpty
-            Person temp = new Person();
-            temp.setUid(personEmpty.getUid());
-            temp.setPassword(personEmpty.getPassword());
-            temp.setEmail(personEmpty.getEmail());
-            temp.setName(personEmpty.getName());
-            temp.setPfp(personEmpty.getPfp());
-            temp.setSid(personEmpty.getSid());
-            temp.setKasmServerNeeded(personEmpty.getKasmServerNeeded());
-            temp.setStats(personEmpty.getStats());
-            persons.add(temp); //add it to the list
+            // Check if a person with this uid or email already exists before adding
+            if (personEmpty.getUid() != null && !personJpaRepository.existsByUid(personEmpty.getUid()) &&
+                (personEmpty.getEmail() == null || !personJpaRepository.existsByEmail(personEmpty.getEmail()))) {
+                //create an actual person from the personEmpty
+                Person temp = new Person();
+                temp.setUid(personEmpty.getUid());
+                temp.setPassword(personEmpty.getPassword());
+                temp.setEmail(personEmpty.getEmail());
+                temp.setName(personEmpty.getName());
+                temp.setPfp(personEmpty.getPfp());
+                temp.setSid(personEmpty.getSid());
+                temp.setKasmServerNeeded(personEmpty.getKasmServerNeeded());
+                temp.setStats(personEmpty.getStats());
+                persons.add(temp); //add it to the list
+            }
         });
         return this.doPersonTransactionFromList(persons);
     }

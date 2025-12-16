@@ -61,6 +61,8 @@
                                      th:href="@{/api/imports/backups}">Database Backups</a></li>
                                 <li><a class="dropdown-item" sec:authorize="hasRole('ROLE_ADMIN')"
                                         th:href="@{/mvc/certificates}">Certificate Manager</a></li>
+                                <li><a class="dropdown-item" sec:authorize="hasRole('ROLE_ADMIN')"
+                                        th:href="@{/mvc/quests}">Quest Manager</a></li>
                             </ul>
                         </li>
                     </ul>

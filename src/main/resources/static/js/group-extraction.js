@@ -2,7 +2,7 @@ import BlobBuilder from "./blob-builder.js";
 
 async function getAllGroup() {
     let data1;
-    await fetch("/api/groups/bulk/extract", {
+    await fetch("/api/groups", {
         method: "GET",
         cache: "no-cache",
     }).then((response) => response.json()).then((data) => {
@@ -18,7 +18,7 @@ document.getElementById("export-all-groups").addEventListener("click", async () 
     let exportData = groups.map(group => ({
         name: group.name,
         period: group.period,
-        personUids: group.members ? group.members.map(member => member.uid) : []
+        memberIds: group.members ? group.members.map(member => member.id) : []
     }));
 
     const blob = new BlobBuilder(BlobBuilder.fileTypeEnum.json, exportData);

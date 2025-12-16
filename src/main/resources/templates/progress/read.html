@@ -1,0 +1,322 @@
+<!DOCTYPE HTML>
+<html xmlns:layout="http://www.w3.org/1999/xhtml" xmlns:th="http://www.w3.org/1999/xhtml"
+    layout:decorate="~{layouts/base}" lang="en">
+
+
+<!-- page style -->
+<th:block layout:fragment="style" th:remove="tag">
+    <style>
+        .small-cell { white-space: nowrap; }
+        .wrap-cell { max-width: 320px; word-break: break-word; }
+    </style>
+</th:block>
+
+<!-- page title -->
+<th:block layout:fragment="title" th:remove="tag">Student Progress</th:block>
+
+<th:block layout:fragment="body" th:remove="tag">
+    <div sec:authorize="hasAnyRole('ROLE_ADMIN', 'ROLE_TEACHER')">
+        <div class="container">
+
+            <h3>Student Progress Viewer</h3>
+
+            <div class="row align-items-md-stretch table-responsive">
+            <table id="progressTable" class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>ID#</th>
+                        <th>Student ID</th>
+                        <th>Subject</th>
+                        <th>Completion %</th>
+                        <th>Status</th>
+                        <th>Last Updated</th>
+                        <th>Action</th>
+                        <th>Import/Export</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="progress : ${list}">
+                        <td class="small-cell" th:text="${progress.id}">ID</td>
+                        <td class="small-cell" th:text="${progress.studentId}">Student ID</td>
+                        <td class="small-cell" th:text="${progress.subject}">Subject</td>
+                        <td class="small-cell" th:text="${progress.completionPercentage}">Completion %</td>
+                        <td class="small-cell" th:text="${progress.status}">Status</td>
+                        <td class="small-cell" th:text="${progress.lastUpdated}">Last Updated</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm" th:attr="data-id=${progress.id},data-studentid=${progress.studentId},data-subject=${progress.subject},data-completion=${progress.completionPercentage},data-status=${progress.status}" onclick="editRow(this)">Edit</button>
+                            <form th:action="@{/api/progress/{id}(id=${progress.id})}" method="post" style="display:inline;">
+                                <input type="hidden" name="_method" value="DELETE" />
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this progress record?')">Delete</button>
+                            </form>
+                        </td>
+                        <td>
+                            <button class="btn btn-info btn-sm" th:attr="data-id=${progress.id}" onclick="exportRow(this)">Export</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-3">
+            <button class="btn btn-primary" onclick="showCreateModal()">Create New</button>
+            <button class="btn btn-success" onclick="exportCSV()">Export CSV</button>
+            <button class="btn btn-info" onclick="document.getElementById('csvFileInput').click()">Import CSV</button>
+            <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div id="progressModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;">
+            <div style="background:white; margin:100px auto; padding:20px; max-width:500px; border-radius:8px;">
+                <h4 id="modalTitle">Create Progress Record</h4>
+                <form id="progressForm">
+                    <input type="hidden" id="progressId" />
+                    <div class="mb-3">
+                        <label class="form-label">Student ID:</label>
+                        <input type="text" id="studentId" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Subject:</label>
+                        <input type="text" id="subject" class="form-control" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Completion Percentage:</label>
+                        <input type="number" id="completionPercentage" class="form-control" min="0" max="100" step="0.1" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status:</label>
+                        <select id="status" class="form-control" required>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Not Started">Not Started</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="saveProgress()">Save</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                </form>
+            </div>
+        </div>
+
+</div>
+    <div sec:authorize="!hasAnyRole('ROLE_ADMIN', 'ROLE_TEACHER')" class="container">
+        <div class="alert alert-danger">Access denied: administrators and teachers only.</div>
+    </div>
+</th:block>
+
+<!-- scripts -->
+<th:block layout:fragment="script" th:remove="tag">
+    <script>
+        function showCreateModal() {
+            document.getElementById('modalTitle').textContent = 'Create Progress Record';
+            document.getElementById('progressId').value = '';
+            document.getElementById('studentId').value = '';
+            document.getElementById('subject').value = '';
+            document.getElementById('completionPercentage').value = '';
+            document.getElementById('status').value = 'In Progress';
+            document.getElementById('progressModal').style.display = 'block';
+        }
+
+        function editRow(btn) {
+            const id = btn.getAttribute('data-id');
+            const studentId = btn.getAttribute('data-studentid');
+            const subject = btn.getAttribute('data-subject');
+            const completion = btn.getAttribute('data-completion');
+            const status = btn.getAttribute('data-status');
+
+            document.getElementById('modalTitle').textContent = 'Edit Progress Record';
+            document.getElementById('progressId').value = id;
+            document.getElementById('studentId').value = studentId;
+            document.getElementById('subject').value = subject;
+            document.getElementById('completionPercentage').value = completion;
+            document.getElementById('status').value = status;
+            document.getElementById('progressModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('progressModal').style.display = 'none';
+        }
+
+        function saveProgress() {
+            const id = document.getElementById('progressId').value;
+            const data = {
+                studentId: document.getElementById('studentId').value,
+                subject: document.getElementById('subject').value,
+                completionPercentage: parseFloat(document.getElementById('completionPercentage').value),
+                status: document.getElementById('status').value
+            };
+
+            const url = id ? `/api/progress/${id}` : '/api/progress';
+            const method = id ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (response.ok) {
+                    alert(id ? 'Progress record updated successfully!' : 'Progress record created successfully!');
+                    location.reload();
+                } else {
+                    alert('Failed to save progress record');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error saving progress record');
+            });
+        }
+
+        function exportRow(btn) {
+            const id = btn.getAttribute('data-id');
+            fetch('/api/progress/' + id)
+                .then(res => {
+                    if (!res.ok) throw new Error('Progress record not found');
+                    return res.json();
+                })
+                .then(data => {
+                    const s = JSON.stringify(data, null, 2);
+                    const blob = new Blob([s], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'progress-' + id + '.json'; a.click();
+                    URL.revokeObjectURL(url);
+                })
+                .catch(e => alert('Export failed: ' + e));
+        }
+
+        function exportCSV() {
+            const table = document.getElementById('progressTable');
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+
+            // Get headers
+            const headers = [];
+            rows[0].querySelectorAll('th').forEach((th, index) => {
+                if (index < rows[0].querySelectorAll('th').length - 2) { // Exclude last 2 columns (Action, Import/Export)
+                    headers.push(th.textContent.trim());
+                }
+            });
+            csv.push(headers.join(','));
+
+            // Get data rows
+            for (let i = 1; i < rows.length; i++) {
+                const row = [];
+                const cols = rows[i].querySelectorAll('td');
+                for (let j = 0; j < cols.length - 2; j++) { // Exclude last 2 columns
+                    let cell = cols[j].textContent.trim();
+                    // Escape commas and quotes
+                    if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+                        cell = '"' + cell.replace(/"/g, '""') + '"';
+                    }
+                    row.push(cell);
+                }
+                csv.push(row.join(','));
+            }
+
+            // Download CSV
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'student-progress.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+
+                if (lines.length < 2) {
+                    alert('CSV file is empty or invalid');
+                    return;
+                }
+
+                // Parse CSV and create progress records
+                const headers = lines[0].split(',').map(h => h.trim());
+                let imported = 0;
+                let failed = 0;
+
+                const promises = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].trim() === '') continue;
+
+                    const values = parseCSVLine(lines[i]);
+                    const progress = {};
+
+                    headers.forEach((header, index) => {
+                        if (values[index] !== undefined && values[index] !== '') {
+                            progress[header] = values[index];
+                        }
+                    });
+
+                    // Send to backend API
+                    const promise = fetch('/api/progress', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(progress)
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            imported++;
+                        } else {
+                            failed++;
+                        }
+                    })
+                    .catch(error => {
+                        failed++;
+                        console.error('Error importing row:', error);
+                    });
+
+                    promises.push(promise);
+                }
+
+                Promise.all(promises).then(() => {
+                    alert(`Import complete! Imported: ${imported}, Failed: ${failed}`);
+                    location.reload();
+                });
+            };
+
+            reader.readAsText(file);
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+    </script>
+</th:block>
+
+</html>

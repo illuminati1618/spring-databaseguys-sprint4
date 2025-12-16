@@ -48,53 +48,6 @@
         </div>
         <br>
 
-        <div sec:authorize="hasRole('ROLE_ADMIN')">
-            <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#exportCollaspe" aria-expanded="false" aria-controls="exportCollaspe">export mass users</button>
-            <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#importCollaspe" aria-expanded="false" aria-controls="importCollaspe">import mass users</button>
-            <br>
-            <div class="collapse" id="exportCollaspe">
-                <div class="card card-body bg-success border-muted">
-                <button id="export-all" class="btn btn-secondary btn-sm">export all</button>
-                <hr>
-                <p class="text-secondary font-weight-light">selection fields are located under the import/export column</p>
-                <button id="export-selected" class="btn btn-secondary btn-sm">export selected</button>
-                <!--
-                <hr>
-                <table class="table table-bordered table-responsive">
-                    <thead>
-                        <tr>
-                            <th>Range</th>
-                            <th>-</th>
-                        </tr>
-                    </thead>
-                    <tbody id="exportTableBody">
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td>
-                                <button id="export-ranges" class="btn btn-secondary btn-sm">export ranges</button>
-                            </td>
-                            <td>
-                                <button id="exportTableAddRow" class="btn btn-primary btn-sm">+</button>
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-                -->
-                </div>
-            </div>
-            <div class="collapse" id="importCollaspe">
-                <div class="card card-body bg-success border-muted">
-                    <input id="personAllFileUpload" type="file" accept=".json" class="form-control">
-                    <button id="import-all" class="btn btn-secondary btn-sm">import people</button>
-                    <hr>
-                    <input id="personSingleFileUpload" type="file" accept=".json" class="form-control">
-                    <button id="import-single" class="btn btn-secondary btn-sm">import person</button>
-                </div>
-            </div>
-            
-        </div>
-
         <div class="row align-items-md-stretch table-responsive">
             <!-- Table displaying the list of persons -->
             <table id="personTable" class="table">
@@ -144,17 +97,19 @@
                                 class="btn btn-danger btn-sm">Delete</a>
                         </td>
                         <td>
-                            <input type="checkbox" name="export-select" class="form-check-input" th:export-select-id="${person.id}">
-                            <hr>
-                            <button class="btn btn-info btn-sm" name="export" th:export-id="${person.id}">Export</button>
-                            <hr>
-                            <input id="personSingleFileUpload" type="file" accept=".json" class="form-control">
-                            <button class="btn btn-info btn-sm" name="import" th:import-id="${person.id}">Import</button>
+                            <button class="btn btn-info btn-sm" th:attr="data-id=${person.id}" onclick="exportRow(this)">Export</button>
                         </td>
                     </tr>
                 </tbody>
             </table>
         </div>
+
+        <div class="mt-3">
+            <button class="btn btn-success" onclick="exportCSV()">Export CSV</button>
+            <button class="btn btn-info" onclick="document.getElementById('csvFileInput').click()">Import CSV</button>
+            <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+        </div>
+
     </div>
 </th:block>
 
@@ -165,11 +120,153 @@
 
 <!-- scripts -->
 <th:block layout:fragment="script" th:remove="tag">
-    <!-- script for extracting/importing people (not included if user is not admin)-->
-    <script sec:authorize="hasRole('ROLE_ADMIN')" type="module" src="/static/js/person/person-extraction.js"
-        th:src="@{/js/person/person-extraction.js}"></script>
-    <script sec:authorize="hasRole('ROLE_ADMIN')" type="module" src="/static/js/person/person-importation.js"
-        th:src="@{/js/person/person-importation.js}"></script>
+    <script>
+        function exportRow(btn) {
+            const id = btn.getAttribute('data-id');
+            fetch('/person/' + id)
+                .then(res => res.json())
+                .then(data => {
+                    const s = JSON.stringify(data, null, 2);
+                    const blob = new Blob([s], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'person-' + id + '.json'; a.click();
+                    URL.revokeObjectURL(url);
+                })
+                .catch(e => alert('Export failed: ' + e));
+        }
+
+        function exportCSV() {
+            const table = document.getElementById('personTable');
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+
+            // Get headers
+            const headers = [];
+            rows[0].querySelectorAll('th').forEach((th, index) => {
+                if (index < rows[0].querySelectorAll('th').length - 2) { // Exclude last 2 columns (Action, Import/Export)
+                    headers.push(th.textContent.trim());
+                }
+            });
+            csv.push(headers.join(','));
+
+            // Get data rows
+            for (let i = 1; i < rows.length; i++) {
+                const row = [];
+                const cols = rows[i].querySelectorAll('td');
+                for (let j = 0; j < cols.length - 2; j++) { // Exclude last 2 columns
+                    let cell = cols[j].textContent.trim();
+                    // Escape commas and quotes
+                    if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+                        cell = '"' + cell.replace(/"/g, '""') + '"';
+                    }
+                    row.push(cell);
+                }
+                csv.push(row.join(','));
+            }
+
+            // Download CSV
+            const csvContent = csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'persons.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+
+                if (lines.length < 2) {
+                    alert('CSV file is empty or invalid');
+                    return;
+                }
+
+                // Parse CSV and create persons
+                const headers = lines[0].split(',').map(h => h.trim());
+                let imported = 0;
+                let failed = 0;
+
+                const promises = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i].trim() === '') continue;
+
+                    const values = parseCSVLine(lines[i]);
+                    const person = {};
+
+                    headers.forEach((header, index) => {
+                        if (values[index] !== undefined && values[index] !== '') {
+                            person[header] = values[index];
+                        }
+                    });
+
+                    // Send to backend API
+                    const promise = fetch('/person/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(person)
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            imported++;
+                        } else {
+                            failed++;
+                        }
+                    })
+                    .catch(error => {
+                        failed++;
+                        console.error('Error importing row:', error);
+                    });
+
+                    promises.push(promise);
+                }
+
+                Promise.all(promises).then(() => {
+                    alert(`Import complete! Imported: ${imported}, Failed: ${failed}`);
+                    location.reload();
+                });
+            };
+
+            reader.readAsText(file);
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+    </script>
     <!-- script for filtering columns-->
     <script type="text/javascript" src="/static/js/read-filter.js" th:src="@{/js/read-filter.js}"></script>
     <!-- script for updating overlay (used for update button)-->

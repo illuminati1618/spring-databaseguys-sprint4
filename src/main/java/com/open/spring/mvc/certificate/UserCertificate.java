@@ -30,7 +30,7 @@ public class UserCertificate {
         this.dateIssued = new Date();
     }
 
-    public UserCertificate(Person person, Certificate certificate, Date dateIssued) {
+    public UserCertificate(Person person, Certificate certificate) {
         this.person = person;
         this.certificate = certificate;
         this.dateIssued = new Date();

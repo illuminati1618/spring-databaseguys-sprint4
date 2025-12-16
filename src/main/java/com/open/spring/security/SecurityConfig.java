@@ -84,14 +84,25 @@ public class SecurityConfig {
                         // Intentionally public - used for polling and public features
                         .requestMatchers("/api/jokes/**").permitAll()
                         // ==========================================
-                        .requestMatchers("/api/exports/**").permitAll()
-                        .requestMatchers("/api/imports/**").permitAll()
+                        .requestMatchers("/api/exports/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/api/imports/**").hasAuthority("ROLE_ADMIN")
                         // ========== SYNERGY (ROLE-BASED ACCESS, Legacy system) ==========
                         // Specific endpoint with student/teacher/admin access
                         .requestMatchers(HttpMethod.POST, "/api/synergy/grades/requests").hasAnyAuthority("ROLE_STUDENT", "ROLE_TEACHER", "ROLE_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/synergy/saigai/").hasAnyAuthority("ROLE_STUDENT", "ROLE_TEACHER", "ROLE_ADMIN")
                         // Teacher and admin access for other POST operations
                         .requestMatchers(HttpMethod.POST, "/api/synergy/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        // Admin access for certificates + quests
+                        .requestMatchers(HttpMethod.POST, "/api/quests/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/quests/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/quests/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        
+
+                        .requestMatchers(HttpMethod.POST, "/api/certificates/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/certificates/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/certificates/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/user-certificates/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/user-certificates/**").hasAnyAuthority("ROLE_TEACHER", "ROLE_ADMIN")
                         // =================================================
 
                         // ========== PUBLIC API ENDPOINTS (Legacy - TODO: Review for security) ==========
@@ -99,7 +110,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/analytics/**").permitAll()
                         .requestMatchers("/api/plant/**").permitAll()
                         .requestMatchers("/api/groups/**").permitAll()
-                        .requestMatchers("/api/academic-progress/**").permitAll()
+                        .requestMatchers("/api/grade-prediction/**").permitAll()
+                        .requestMatchers("/api/admin-evaluation/**").permitAll()
                         .requestMatchers("/api/grades/**").permitAll()
                         .requestMatchers("/api/progress/**").permitAll()
                         .requestMatchers("/api/calendar/**").permitAll()

@@ -136,4 +136,11 @@ public class AssignmentViewController {
     public String queueManagement(){
         return "assignments/queue_management";
     }
+
+    @GetMapping("/read")
+    public String read(Model model) {
+        List<Assignment> assignments = assignmentRepository.findAll();
+        model.addAttribute("list", assignments);
+        return "assignments/read";
+    }
 }

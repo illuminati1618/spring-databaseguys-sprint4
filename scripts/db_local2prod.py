@@ -18,7 +18,7 @@ from pathlib import Path
 # Configuration
 LOCAL_URL = "http://localhost:8585"
 PROD_URL = "https://spring.opencodingsociety.com"
-PROD_AUTH_URL = f"{PROD_URL}/authenticate"
+PROD_LOGIN_URL = f"{PROD_URL}/login"
 PROD_IMPORT_URL = f"{PROD_URL}/api/imports/manual"
 LOCAL_EXPORT_URL = f"{LOCAL_URL}/api/exports/getAll"
 
@@ -92,29 +92,28 @@ def export_local_database():
         sys.exit(1)
 
 def authenticate_to_production(password):
-    """Authenticate to production server and get JWT cookie"""
+    """Authenticate to production server using form login and get session cookie"""
     print("\n Authenticating to production server...")
 
+    # Use form-based login (not JWT) because @JsonIgnore on password field
+    # prevents JSON authentication from working
     auth_data = {
-        "uid": ADMIN_UID,
+        "username": ADMIN_UID,
         "password": password
     }
 
-    headers = {
-        "Content-Type": "application/json"
-    }
-
     try:
-        response = requests.post(PROD_AUTH_URL, json=auth_data, headers=headers, timeout=10)
-        response.raise_for_status()
+        # Create a session to handle cookies and redirects
+        session = requests.Session()
+        response = session.post(PROD_LOGIN_URL, data=auth_data, timeout=10, allow_redirects=False)
 
-        # Extract JWT cookie
-        if "jwt_java_spring" in response.cookies:
+        # Form login returns 302 redirect on success
+        if response.status_code == 302 and "sess_java_spring" in response.cookies:
             print(f" Authenticated as '{ADMIN_UID}'")
-            return response.cookies
+            return session.cookies
         else:
-            print(" Error: No JWT cookie received from server")
-            print(f"   Response: {response.text}")
+            print(f" Authentication failed: HTTP {response.status_code}")
+            print(f"   Response: {response.text[:200]}")
             sys.exit(1)
 
     except requests.exceptions.HTTPError as e:

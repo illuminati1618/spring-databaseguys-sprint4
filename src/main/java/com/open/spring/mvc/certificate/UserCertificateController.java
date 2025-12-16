@@ -76,10 +76,20 @@ public class UserCertificateController {
             return new ResponseEntity<>("Certificate not found", HttpStatus.NOT_FOUND);
         }
 
-        UserCertificate newUserCertificate = new UserCertificate(personOpt.get(), certificateOpt.get(), new Date());
+        UserCertificate newUserCertificate = new UserCertificate(personOpt.get(), certificateOpt.get());
         userCertificateRepository.save(newUserCertificate);
         return new ResponseEntity<>(newUserCertificate, HttpStatus.CREATED);
     }
+
+    @PostMapping("/request")
+    public ResponseEntity<?> requestUserCertificate(@Valid @RequestBody UserCertificateRequestBody requestBody) {
+        // Check if certificate requirements were met
+        // If met then create UserCertificate entry
+        // If not met then return appropriate response
+        
+        return new ResponseEntity<>("Certificate request received", HttpStatus.OK);
+    }
+    
     
     @PutMapping("/update/{id}")
     public ResponseEntity<?> updateUserCertificate(@PathVariable Long id, @Valid @RequestBody UserCertificateRequestBody requestBody) {

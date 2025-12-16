@@ -1,0 +1,133 @@
+<!DOCTYPE HTML>
+<html xmlns:layout="http://www.w3.org/1999/xhtml" xmlns:th="http://www.w3.org/1999/xhtml"
+    layout:decorate="~{layouts/base}" lang="en">
+
+
+<!-- page style -->
+<th:block layout:fragment="style" th:remove="tag">
+    <style>
+        /* Styling for member display */
+        .member-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</th:block>
+
+<!-- page title -->
+<th:block layout:fragment="title" th:remove="tag">Group List</th:block>
+
+<th:block layout:fragment="body" th:remove="tag">
+    <div class="container">
+
+        <h3>Group Viewer</h3>
+
+        <!-- Column visibility toggle buttons -->
+        <div class="d-flex flex-wrap mb-3">
+            <button class="btn btn-secondary toggle-column active" data-column="0">ID#</button>
+            <button class="btn btn-secondary toggle-column active" data-column="1">Name</button>
+            <button class="btn btn-secondary toggle-column active" data-column="2">Period</button>
+            <button class="btn btn-secondary toggle-column active" data-column="3">Members</button>
+            <button class="btn btn-secondary toggle-column active" data-column="4">Action</button>
+            <button class="btn btn-secondary toggle-column inactive" data-column="5">Import/Export</button>
+        </div>
+        <br>
+
+        <div sec:authorize="hasRole('ROLE_ADMIN')">
+            <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#exportCollaspe" aria-expanded="false" aria-controls="exportCollaspe">export mass groups</button>
+            <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#importCollaspe" aria-expanded="false" aria-controls="importCollaspe">import mass groups</button>
+            <br>
+            <div class="collapse" id="exportCollaspe">
+                <div class="card card-body bg-success border-muted">
+                <button id="export-all" class="btn btn-secondary btn-sm">export all</button>
+                <hr>
+                <p class="text-secondary font-weight-light">selection fields are located under the import/export column</p>
+                <button id="export-selected" class="btn btn-secondary btn-sm">export selected</button>
+                </div>
+            </div>
+            <div class="collapse" id="importCollaspe">
+                <div class="card card-body bg-success border-muted">
+                    <input id="groupAllFileUpload" type="file" accept=".json" class="form-control">
+                    <button id="import-all" class="btn btn-secondary btn-sm">import groups</button>
+                    <hr>
+                    <input id="groupSingleFileUpload" type="file" accept=".json" class="form-control">
+                    <button id="import-single" class="btn btn-secondary btn-sm">import group</button>
+                </div>
+            </div>
+            
+        </div>
+
+        <div class="row align-items-md-stretch table-responsive">
+            <!-- Table displaying the list of groups -->
+            <table id="groupTable" class="table">
+                <thead>
+                    <tr>
+                        <th>ID#</th>
+                        <th>Name</th>
+                        <th>Period</th>
+                        <th>Members</th>
+                        <th>Action</th>
+                        <th>Import/Export</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="group : ${list}">
+                        <td th:text="${group.id}">Group ID</td>
+                        <td th:text="${group.name}">Name</td>
+                        <td th:text="${group.period}">Period</td>
+                        <td>
+                            <div class="member-list">
+                                <ul class="list-unstyled mb-0">
+                                    <li th:each="member : ${group.groupMembers}">
+                                        <a th:href="'https://github.com/' + ${member.uid}" target="_blank"
+                                            th:text="${member.name} + ' (' + ${member.uid} + ')'">Member</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <a th:href="@{/mvc/groups/update/{id}(id = ${group.id})}" class="btn btn-warning btn-sm"
+                                name="update">Update</a>
+                            <a sec:authorize="hasRole('ROLE_ADMIN')"
+                                th:href="@{/mvc/groups/delete/{id}(id = ${group.id})}"
+                                class="btn btn-danger btn-sm">Delete</a>
+                        </td>
+                        <td>
+                            <input type="checkbox" name="export-select" class="form-check-input" th:export-select-id="${group.id}">
+                            <hr>
+                            <button class="btn btn-info btn-sm" name="export" th:export-id="${group.id}">Export</button>
+                            <hr>
+                            <input type="file" accept=".json" class="form-control group-single-file-upload" th:data-group-id="${group.id}">
+                            <button class="btn btn-info btn-sm" name="import" th:import-id="${group.id}">Import</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create Group Button -->
+        <div class="d-flex justify-content-center mb-3">
+            <a th:href="@{/mvc/groups/create}" class="btn btn-success">Create Group</a>
+        </div>
+    </div>
+</th:block>
+
+<!-- Overlay for update page-->
+<th:block layout:fragment="overlay-body" th:remove="tag">
+    <div id="overlay-Container"></div>
+</th:block>
+
+<!-- scripts -->
+<th:block layout:fragment="script" th:remove="tag">
+    <!-- script for extracting/importing groups (not included if user is not admin)-->
+    <script sec:authorize="hasRole('ROLE_ADMIN')" type="module" src="/static/js/group/group-extraction.js"
+        th:src="@{/js/group/group-extraction.js}"></script>
+    <script sec:authorize="hasRole('ROLE_ADMIN')" type="module" src="/static/js/group/group-importation.js"
+        th:src="@{/js/group/group-importation.js}"></script>
+    <!-- script for filtering columns-->
+    <script type="text/javascript" src="/static/js/read-filter.js" th:src="@{/js/read-filter.js}"></script>
+    <!-- script for updating overlay (used for update button)-->
+    <script type="text/javascript" src="/static/js/read-overlay.js" th:src="@{/js/read-overlay.js}"></script>
+</th:block>
+
+</html>

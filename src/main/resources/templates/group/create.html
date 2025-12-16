@@ -1,0 +1,60 @@
+<!DOCTYPE HTML>
+<html xmlns:layout="http://www.w3.org/1999/xhtml" xmlns:th="http://www.w3.org/1999/xhtml"
+    layout:decorate="~{layouts/base}" lang="en">
+
+<!-- page style -->
+<th:block layout:fragment="style" th:remove="tag"></th:block>
+
+<!-- page script -->
+<head>
+    <!--script for group creation-->
+    <script type="text/javascript" src="/static/js/group/group-creation.js"
+        th:src="@{/js/group/group-creation.js}"></script>
+</head>
+
+<!-- page title -->
+<th:block layout:fragment="title" th:remove="tag">Create Group</th:block>
+
+<!-- Main body content for the page -->
+<th:block layout:fragment="body" th:remove="tag">
+    <!-- Form content container -->
+    <div class="container">
+        <h3>Create New Group</h3>
+
+        <form class="form-inline" action="#" th:action="@{/mvc/groups/create}" th:object="${group}" method="POST"
+            id="createGroupForm">
+
+            <!-- Group Name input field -->
+            <div class="input-group mb-2 mr-sm-2">
+                <label for="name" class="form-label">Group Name</label>
+                <input type="text" th:field="*{name}" id="name" class="form-control" placeholder="Enter group name" required>
+                <small th:if="${#fields.hasErrors('name')}" th:errors="*{name}">Group Name Error</small>
+            </div>
+
+            <!-- Period input field -->
+            <div class="input-group mb-2 mr-sm-2">
+                <label for="period" class="form-label">Period</label>
+                <input type="text" th:field="*{period}" id="period" class="form-control" placeholder="Enter period">
+                <small th:if="${#fields.hasErrors('period')}" th:errors="*{period}">Period Error</small>
+            </div>
+
+            <!-- Member Selection -->
+            <div class="input-group mb-2 mr-sm-2">
+                <label for="memberSearch" class="form-label">Search Members</label>
+                <input type="text" id="memberSearch" class="form-control" placeholder="Search for members...">
+            </div>
+
+            <div id="memberList" class="mb-3" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px; border-radius: 0.375rem;">
+                <!-- Member checkboxes will be populated by JavaScript -->
+            </div>
+
+            <!-- Create Group Button -->
+            <button type="submit" class="btn btn-secondary">Create Group</button>
+
+            <!-- Cancel Button -->
+            <a th:href="@{/mvc/groups/read}" class="btn btn-primary">Cancel</a>
+        </form>
+    </div>
+</th:block>
+
+</html>

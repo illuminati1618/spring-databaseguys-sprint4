@@ -7,7 +7,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value; // Import Value
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -19,33 +19,68 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    // Inject value from application.properties
-    // Defaults to 20 if the property is missing
     @Value("${security.rate-limit.requests-per-minute:20}")
     private int requestsPerMinute;
 
     private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
+    private final Map<String, Integer> userLimits = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> activeUsers = new ConcurrentHashMap<>();
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
             throws ServletException, IOException {
-        
-        String ip = request.getRemoteAddr();
-        Bucket bucket = cache.computeIfAbsent(ip, this::createNewBucket);
+
+        String username = request.getUserPrincipal() != null
+                ? request.getUserPrincipal().getName()
+                : request.getRemoteAddr();
+
+        // Track logged-in users
+        if (request.getUserPrincipal() != null) {
+            activeUsers.put(username, true);
+        }
+
+        int activeUserCount = activeUsers.size();
+        int dynamicLimit = computeDynamicLimit(username, activeUserCount);
+
+        // Check if limit has changed for this user
+        Integer previousLimit = userLimits.get(username);
+        if (previousLimit == null || previousLimit != dynamicLimit) {
+            // Recreate bucket with new limit
+            cache.put(username, createBucketWithLimit(dynamicLimit));
+            userLimits.put(username, dynamicLimit);
+        }
+
+        Bucket bucket = cache.get(username);
 
         if (bucket.tryConsume(1)) {
             filterChain.doFilter(request, response);
         } else {
-            response.setStatus(429); // 429 Too Many Requests
-            response.getWriter().write("Too many requests");
+            response.setStatus(429);
+            response.getWriter().write("Too many requests - limit: " + dynamicLimit + " per minute");
         }
     }
 
-    private Bucket createNewBucket(String key) {
-        // Use the injected configuration value
-        Bandwidth limit = Bandwidth.classic(requestsPerMinute, Refill.greedy(requestsPerMinute, Duration.ofMinutes(1)));
-        return Bucket.builder()
-                .addLimit(limit)
+    private Bucket createBucketWithLimit(int limit) {
+        // Use Bandwidth.builder() instead of Bandwidth.classic()
+        Bandwidth bandwidth = Bandwidth.builder()
+                .capacity(limit)
+                .refillGreedy(limit, Duration.ofMinutes(1))
                 .build();
+
+        return Bucket.builder()
+                .addLimit(bandwidth)
+                .build();
+    }
+
+    private int computeDynamicLimit(String username, int activeUsers) {
+        if (activeUsers < 5) {
+            return 100;
+        } else if (activeUsers < 20) {
+            return 300;
+        } else {
+            return 600;
+        }
     }
 }

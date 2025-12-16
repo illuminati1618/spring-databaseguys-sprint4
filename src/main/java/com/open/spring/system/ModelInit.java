@@ -132,31 +132,9 @@ public class ModelInit {
                 if (dataSource != null) {
                     try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
                         // ========== DATABASE CLEANUP - DISABLED ==========
-                        // Database cleanup has been disabled to prevent dropping tables on every startup
-                        // Uncomment the section below and set ENABLE_DB_CLEANUP=true to enable cleanup
+                        // Database cleanup has been disabled to prevent tables from being dropped on startup
+                        // Uncomment the section below if you need to manually clean up specific tables
                         /*
-                        if ("true".equalsIgnoreCase(System.getenv("ENABLE_DB_CLEANUP"))) {
-                            System.out.println("Starting conservative database cleanup...");
-                            
-                            // 1. Drop User tables (0 rows, 0 code references)
-                            try {
-                                st.execute("DROP TABLE IF EXISTS user;");
-                                st.execute("DROP TABLE IF EXISTS user_seq;");
-                                System.out.println("Dropped 'user' tables");
-                            } catch (SQLException e) {
-                                System.out.println("WARNING: Could not drop user tables");
-                            }
-                            
-                            // 2. Drop responses table (0 rows, 0 code references)
-                            try {
-                                st.execute("DROP TABLE IF EXISTS responses;");
-                                System.out.println("Dropped 'responses' table");
-                            } catch (SQLException e) {
-                                System.out.println("WARNING: Could not drop responses table");
-                            }
-                            
-                            // 3. Drop student table (0 rows, 0 code references)
-                        // ========== DATABASE CLEANUP - START ==========
                         System.out.println("Starting database cleanup...");
                         
                         // 1. Drop User tables (0 rows, 0 code references)
@@ -268,6 +246,9 @@ public class ModelInit {
                             
                             System.out.println("Conservative database cleanup complete!");
                         }
+                        System.out.println("Dropped " + droppedAuditTables + " orphaned audit tables");
+                        
+                        System.out.println("Conservative database cleanup complete!");
                         */
                         // ========== DATABASE CLEANUP - END ==========
 
@@ -295,6 +276,8 @@ public class ModelInit {
                         st.execute(create);
                         System.out.println("Ensured 'adventure' table exists");
                         // Seed default adventure rows if none exist (instantiate in code)
+                        // TEMPORARILY DISABLED - Adventure seeding causes NOT NULL constraint failures
+                        /*
                         try {
                             long advCount = 0L;
                             try { advCount = adventureJpaRepository.count(); } catch (Exception ignore) { advCount = 0L; }
@@ -305,6 +288,8 @@ public class ModelInit {
                                 }
                                 System.out.println("Seeded default Adventure rows via Adventure.init()");
                             }
+                        */
+                        try {
                             // Ensure 'details' column exists and migrate existing columns into JSON 'details'
                             try {
                                 try {

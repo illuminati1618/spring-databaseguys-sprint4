@@ -153,6 +153,23 @@ public class PersonApiController {
     @PostMapping("/person/create")
     public ResponseEntity<Object> postPerson(@RequestBody PersonDto personDto) {
 
+        // Check if a person with this uid already exists
+        if (personDto.getUid() != null && repository.existsByUid(personDto.getUid())) {
+            HttpHeaders responseHeaders = new HttpHeaders();
+            responseHeaders.setContentType(MediaType.APPLICATION_JSON);
+            JSONObject responseObject = new JSONObject();
+            responseObject.put("error", "A person with uid '" + personDto.getUid() + "' already exists");
+            return new ResponseEntity<>(responseObject.toString(), responseHeaders, HttpStatus.CONFLICT);
+        }
+
+        // Check if a person with this email already exists
+        if (personDto.getEmail() != null && repository.existsByEmail(personDto.getEmail())) {
+            HttpHeaders responseHeaders = new HttpHeaders();
+            responseHeaders.setContentType(MediaType.APPLICATION_JSON);
+            JSONObject responseObject = new JSONObject();
+            responseObject.put("error", "A person with email '" + personDto.getEmail() + "' already exists");
+            return new ResponseEntity<>(responseObject.toString(), responseHeaders, HttpStatus.CONFLICT);
+        }
   
         // A person object WITHOUT ID will create a new record in the database
         Person person = new Person(personDto.getEmail(), personDto.getUid(),personDto.getPassword(),personDto.getSid(), personDto.getName(), "/images/default.png", true, personDetailsService.findRole("USER"));
@@ -238,6 +255,9 @@ public class PersonApiController {
                 // Check if the response is successful
                 if (response.getStatusCode() == HttpStatus.OK) {
                     createdPersons.add(personDto.getEmail());
+                } else if (response.getStatusCode() == HttpStatus.CONFLICT) {
+                    // Handle duplicate uid or email
+                    duplicatePersons.add(personDto.getUid() != null ? personDto.getUid() : personDto.getEmail());
                 } else {
                     errors.add("Failed to create person with email: " + personDto.getEmail());
                 }
@@ -309,16 +329,29 @@ public class PersonApiController {
             Person existingPerson = optionalPerson.get();
 
             // Update fields only if they're provided in personDto
-            if (personDto.getEmail() != null) {
+            if (personDto.getEmail() != null && !personDto.getEmail().equals(existingPerson.getEmail())) {
+                // Check if email is already taken by another person
+                Person personWithEmail = repository.findByEmail(personDto.getEmail());
+                if (personWithEmail != null && !personWithEmail.getId().equals(existingPerson.getId())) {
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("error", "A person with email '" + personDto.getEmail() + "' already exists");
+                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
+                }
                 existingPerson.setEmail(personDto.getEmail());
             }
             if (personDto.getPassword() != null) {
                 existingPerson.setPassword(passwordEncoder.encode(personDto.getPassword()));
 
             }
-            if (personDto.getUid() != null) {
+            if (personDto.getUid() != null && !personDto.getUid().equals(existingPerson.getUid())) {
+                // Check if uid is already taken by another person
+                Person personWithUid = repository.findByUid(personDto.getUid());
+                if (personWithUid != null && !personWithUid.getId().equals(existingPerson.getId())) {
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("error", "A person with uid '" + personDto.getUid() + "' already exists");
+                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
+                }
                 existingPerson.setUid(personDto.getUid());
-
             }
             if (personDto.getSid() != null) {
                 existingPerson.setSid(personDto.getSid());
@@ -436,14 +469,47 @@ public class PersonApiController {
         if (optional.isPresent()) {  // If the person with the given ID exists
             Person existingPerson = optional.get();
 
+            // Check for duplicate email if email is being changed
+            if (personDto.getEmail() != null && !personDto.getEmail().equals(existingPerson.getEmail())) {
+                Person personWithEmail = repository.findByEmail(personDto.getEmail());
+                if (personWithEmail != null && !personWithEmail.getId().equals(existingPerson.getId())) {
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("error", "A person with email '" + personDto.getEmail() + "' already exists");
+                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
+                }
+            }
+
+            // Check for duplicate uid if uid is being changed
+            if (personDto.getUid() != null && !personDto.getUid().equals(existingPerson.getUid())) {
+                Person personWithUid = repository.findByUid(personDto.getUid());
+                if (personWithUid != null && !personWithUid.getId().equals(existingPerson.getId())) {
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("error", "A person with uid '" + personDto.getUid() + "' already exists");
+                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
+                }
+            }
+
             // Update the existing person's details
-            existingPerson.setEmail(personDto.getEmail());
-            existingPerson.setPassword(personDto.getPassword());
-            existingPerson.setName(personDto.getName());
+            if (personDto.getEmail() != null) {
+                existingPerson.setEmail(personDto.getEmail());
+            }
+            if (personDto.getPassword() != null) {
+                existingPerson.setPassword(personDto.getPassword());
+            }
+            if (personDto.getName() != null) {
+                existingPerson.setName(personDto.getName());
+            }
+            if (personDto.getUid() != null) {
+                existingPerson.setUid(personDto.getUid());
+            }
             
             // Optional: Update other fields if they exist in Person
-            existingPerson.setPfp(personDto.getPfp());
-            existingPerson.setKasmServerNeeded(personDto.getKasmServerNeeded());
+            if (personDto.getPfp() != null) {
+                existingPerson.setPfp(personDto.getPfp());
+            }
+            if (personDto.getKasmServerNeeded() != null) {
+                existingPerson.setKasmServerNeeded(personDto.getKasmServerNeeded());
+            }
 
             // Save the updated person back to the repository
             repository.save(existingPerson);
@@ -546,5 +612,18 @@ public class PersonApiController {
         }
         // return Bad ID
         return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * Search for people by name or email.
+     * 
+     * @param query The search query (name or email).
+     * @return A ResponseEntity containing a list of Person entities that match the
+     *         search query.
+     */
+    @GetMapping("/people/search")
+    public ResponseEntity<List<Person>> searchPeople(@RequestParam("query") String query) {
+        List<Person> people = repository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(query, query);
+        return new ResponseEntity<>(people, HttpStatus.OK);
     }
 }

@@ -36,7 +36,12 @@ SPRING_PORT = 8585
 LOG_FILE = "/tmp/db_migrate.log"
 
 # Remote database configuration
-DATA_URL = "https://spring.opencodingsociety.com/api/exports/getAll"
+PROD_URL = "https://spring.opencodingsociety.com"
+PROD_LOGIN_URL = f"{PROD_URL}/login"  # Changed from /authenticate
+DATA_URL = f"{PROD_URL}/api/exports/getAll"
+
+# Credentials
+ADMIN_UID = "toby"
 
 
 def print_header(title):
@@ -46,6 +51,58 @@ def print_header(title):
     print("=" * 60 + "\n")
 
 
+def load_admin_password():
+    """Load ADMIN_PASSWORD from .env file"""
+    env_file = PROJECT_ROOT / ".env"
+    if not env_file.exists():
+        print(f"  Error: .env file not found at {env_file}")
+        sys.exit(1)
+    
+    with open(env_file, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("ADMIN_PASSWORD="):
+                password = line.split("=", 1)[1].strip()
+                # Remove quotes if present
+                password = password.strip('"').strip("'")
+                return password
+    
+    print("  Error: ADMIN_PASSWORD not found in .env file")
+    sys.exit(1)
+
+
+def authenticate_to_production(password):
+    """Authenticate to production server using form login and get session cookie"""
+    print("Authenticating to production server...")
+    # Use form-based login (not JWT) because @JsonIgnore on password field
+    # prevents JSON authentication from working
+    auth_data = {
+        "username": ADMIN_UID,  # Changed from uid
+        "password": password
+    }
+    
+    try:
+        # Create a session to handle cookies and redirects
+        session = requests.Session()
+        response = session.post(PROD_LOGIN_URL, data=auth_data, timeout=10, allow_redirects=False)
+        
+        # Form login returns 302 redirect on success
+        if response.status_code == 302 and "sess_java_spring" in response.cookies:
+            print(f"  Authenticated as '{ADMIN_UID}'")
+            return session.cookies
+        else:
+            print(f"  Authentication failed: HTTP {response.status_code}")
+            print(f"  Response: {response.text[:200]}")
+            sys.exit(1)
+    except requests.exceptions.HTTPError as e:
+        print(f"  Authentication failed: HTTP {e.response.status_code}")
+        print(f"  Response: {e.response.text}")
+        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print(f"  Error connecting to production server: {e}")
+        sys.exit(1)
+
+
 def is_port_in_use(port):
     """Check if a port is in use"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -53,13 +110,17 @@ def is_port_in_use(port):
 
 
 def fetch_remote_data():
-    """Fetch data from remote database"""
+    """Fetch data from remote database with authentication"""
     print("\nFetching remote data...")
     print(f"  Fetching from: {DATA_URL}")
     
+    # Load credentials and authenticate
+    password = load_admin_password()
+    cookies = authenticate_to_production(password)
+    
     try:
         headers = {"Content-Type": "application/json"}
-        response = requests.get(DATA_URL, headers=headers, timeout=30)
+        response = requests.get(DATA_URL, headers=headers, cookies=cookies, timeout=30)
         response.raise_for_status()
         
         data = response.json()
@@ -399,7 +460,7 @@ def main():
         print("Exiting without making changes.")
         sys.exit(0)
     
-    # Step 3: Fetch remote data
+    # Step 3: Fetch remote data (now with form-based authentication)
     remote_data = fetch_remote_data()
     if remote_data:
         save_data_to_json(remote_data)
