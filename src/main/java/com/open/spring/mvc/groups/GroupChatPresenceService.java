@@ -11,6 +11,12 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
+/**
+ * Service managing user presence within specific chat groups.
+ * Enables tracking the real-time participation of group members connected 
+ * via WebSocket by retaining active session identifiers mapped to the corresponding 
+ * usernames and actively joined groups.
+ */
 @Service
 public class GroupChatPresenceService {
 

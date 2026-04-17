@@ -6,6 +6,15 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+/**
+ * Configuration class for setting up a STOMP over WebSocket broker.
+ * Implements {@link WebSocketMessageBrokerConfigurer} to customize the 
+ * message broker and configure registered STOMP endpoints.
+ * <p>
+ * This configuration enables a simple memory-based message broker to 
+ * route messages back to the client on destinations prefixed with "/topic",
+ * and registers the "/ws-chat" endpoint.
+ */
 @Configuration
 @EnableWebSocketMessageBroker
 public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {

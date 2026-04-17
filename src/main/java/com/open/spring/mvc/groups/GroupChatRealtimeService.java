@@ -8,6 +8,10 @@ import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Service to handle the real-time publishing of group chat messages and presence events.
+ * It uses {@link SimpMessagingTemplate} to broadcast messages to corresponding specific group topics.
+ */
 @Service
 @RequiredArgsConstructor
 public class GroupChatRealtimeService {

@@ -342,6 +342,10 @@ public class BathroomQueueApiController {
     public ResponseEntity<BathroomQueue> getQueueByTeacher(@PathVariable String teacherEmail) {
         return repository.findByTeacherEmail(teacherEmail)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+                .orElseGet(() -> {
+                    BathroomQueue emptyQueue = new BathroomQueue(teacherEmail, "");
+                    emptyQueue.setMaxOccupancy(1);
+                    return ResponseEntity.ok(emptyQueue);
+                });
     }
 }

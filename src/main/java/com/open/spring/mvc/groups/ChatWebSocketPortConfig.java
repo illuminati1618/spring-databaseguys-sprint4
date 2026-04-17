@@ -6,6 +6,11 @@ import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactor
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Spring configuration class that sets up a dedicated secondary port
+ * for WebSocket traffic on the embedded Tomcat server if a distinct socket port 
+ * is specified in the application configuration alongside the main server port.
+ */
 @Configuration
 public class ChatWebSocketPortConfig {
 

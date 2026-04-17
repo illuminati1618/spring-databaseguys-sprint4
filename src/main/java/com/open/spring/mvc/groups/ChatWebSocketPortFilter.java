@@ -10,6 +10,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * Filter that intercepts incoming HTTP requests bound for the WebSocket 
+ * endpoint ("/ws-chat") and redirects them to the dedicated WebSocket 
+ * port configured in the application properties.
+ * <p>
+ * This extends {@link OncePerRequestFilter} to guarantee a single execution per request dispatch.
+ */
 @Component
 public class ChatWebSocketPortFilter extends OncePerRequestFilter {
 

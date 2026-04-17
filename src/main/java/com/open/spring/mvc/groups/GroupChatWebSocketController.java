@@ -9,6 +9,13 @@ import org.springframework.stereotype.Controller;
 
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Controller class that handles incoming WebSocket messages for the group chat feature.
+ * <p>
+ * Methods annotated with {@link MessageMapping} will consume messages routed 
+ * with the defined destination. Interacts with {@link GroupChatRealtimeService} 
+ * and {@link GroupChatPresenceService} to handle joining/leaving groups and message delivery.
+ */
 @Controller
 @RequiredArgsConstructor
 public class GroupChatWebSocketController {

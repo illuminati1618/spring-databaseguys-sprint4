@@ -101,6 +101,204 @@ public class PersonApiController {
         }
     }
 
+
+
+    /**
+     * Retrieves a Person entity by its UID.
+     *
+     * @param uid The UID of the Person entity to retrieve.
+     * @return A ResponseEntity containing the Person entity if found, or a
+     *         NOT_FOUND status if not found.
+     */
+    @GetMapping("/person/uid/{uid}")
+    @PreAuthorize("hasAnyAuthority('ROLE_USER','ROLE_STUDENT','ROLE_TEACHER','ROLE_ADMIN')")
+    public ResponseEntity<Person> getPersonByUid(@PathVariable String uid) {
+        Person person = repository.findByUid(uid);
+        if (person != null) {
+            return new ResponseEntity<>(person, HttpStatus.OK);
+        }
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * Retrieves all Person entities that have face data registered.
+     * Returns a list of maps containing 'uid' and 'faceData'.
+     * 
+     * @return A ResponseEntity containing a list of maps with uid and faceData.
+     */
+    @GetMapping("/person/faces")
+    // Public for bathroom-pass face matcher (self-service). Security is via token/cookie in other workflows.
+    public ResponseEntity<List<Map<String, String>>> getPersonFaces() {
+        List<Person> people = repository.findByFaceDataIsNotNull();
+        List<Map<String, String>> faces = new ArrayList<>();
+        for (Person person : people) {
+            Map<String, String> face = new HashMap<>();
+            face.put("uid", person.getUid());
+            face.put("faceData", person.getFaceData());
+            faces.add(face);
+        }
+        return new ResponseEntity<>(faces, HttpStatus.OK);
+    }
+
+    /**
+     * Identify a person from the provided camera image using face data stored in Spring.
+     *
+     * This implementation now runs DeepFace through a local Python subprocess rather than proxying to Flask.
+     *
+     * @param body map containing "image" (base64) and optional "threshold"
+     * @return map containing match result or error
+     */
+    @PostMapping("/person/identify")
+    public ResponseEntity<Map<String, Object>> identifyPerson(@RequestBody Map<String, Object> body) {
+        String image = (String) body.get("image");
+        Double thresholdValue = 0.40; // Default threshold
+
+        if (body.containsKey("threshold")) {
+            Object thresholdObj = body.get("threshold");
+            if (thresholdObj instanceof Number) {
+                thresholdValue = ((Number) thresholdObj).doubleValue();
+            } else if (thresholdObj instanceof String) {
+                try {
+                    thresholdValue = Double.parseDouble((String) thresholdObj);
+                } catch (NumberFormatException e) {
+                    // Fall back to default
+                }
+            }
+        }
+
+        if (image == null || image.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("match", false);
+            error.put("message", "No image provided");
+            return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        }
+
+        logger.info("IDENTIFY request received. Image length: {}", image.length());
+        Map<String, Object> result = faceRecognitionService.identify(image, thresholdValue);
+        logger.info("IDENTIFY result: {}", result.get("match"));
+        return new ResponseEntity<>(result, HttpStatus.OK);
+    }
+
+    /**
+     * Update a Person entity by its ID (using current authenticated user).
+     *
+     * 
+     * @param authentication Current authentication context.
+     * @param personDto The updated PersonDto object.
+     * @return A ResponseEntity containing the updated Person entity if found, or a
+     *         NOT_FOUND status if not found.
+     */
+    @PostMapping(value = "/person/update", produces = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Object> updatePerson(Authentication authentication, @RequestBody final PersonDto personDto) {
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+        }
+
+        // Get the email of the current user from the authentication context
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        String email = userDetails.getUsername(); // Assuming email is used as the username in Spring Security
+
+        // Find the person by email
+        Optional<Person> optionalPerson = Optional.ofNullable(repository.findByUid(email));
+        if (optionalPerson.isPresent()) {
+            Person existingPerson = optionalPerson.get();
+            boolean isAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+
+            boolean emailChanged = personDto.getEmail() != null
+                    && !personDto.getEmail().equals(existingPerson.getEmail());
+            boolean passwordChanged = personDto.getPassword() != null && !personDto.getPassword().isBlank();
+            boolean sidChanged = personDto.getSid() != null && !personDto.getSid().equals(existingPerson.getSid());
+            boolean nameChanged = personDto.getName() != null && !personDto.getName().equals(existingPerson.getName());
+            boolean pfpChanged = personDto.getPfp() != null && !personDto.getPfp().equals(existingPerson.getPfp());
+            boolean kasmChanged = personDto.getKasmServerNeeded() != null
+                    && !personDto.getKasmServerNeeded().equals(existingPerson.getKasmServerNeeded());
+            boolean uidChangeRequested = personDto.getUid() != null
+                    && !personDto.getUid().equals(existingPerson.getUid());
+            
+            // Log faceData receipt for debugging
+            if (personDto.getFaceData() != null) {
+                logger.info("UPDATE received faceData for user: {}. Length: {}", email, personDto.getFaceData().length());
+            }
+
+            boolean faceDataChanged = personDto.getFaceData() != null
+                    && !personDto.getFaceData().equals(existingPerson.getFaceData());
+
+            if (!isAdmin && uidChangeRequested) {
+                logger.warn("AUDIT profile_update_blocked actor={} reason=uid_change_not_allowed",
+                        existingPerson.getUid());
+                JSONObject responseObject = new JSONObject();
+                responseObject.put("error", "UID cannot be changed through this endpoint");
+                return new ResponseEntity<>(responseObject.toString(), HttpStatus.FORBIDDEN);
+            }
+
+            StringBuilder changedFields = new StringBuilder();
+            if (emailChanged) {
+                // Check if email is already taken by another person
+                Person personWithEmail = repository.findByEmail(personDto.getEmail());
+                if (personWithEmail != null && !personWithEmail.getId().equals(existingPerson.getId())) {
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("error", "A person with email '" + personDto.getEmail() + "' already exists");
+                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
+                }
+                existingPerson.setEmail(personDto.getEmail());
+                changedFields.append("email,");
+            }
+            if (passwordChanged) {
+                existingPerson.setPassword(passwordEncoder.encode(personDto.getPassword()));
+                changedFields.append("password,");
+            }
+            if (isAdmin && uidChangeRequested) {
+                // Check if uid is already taken by another person
+                Person personWithUid = repository.findByUid(personDto.getUid());
+                if (personWithUid != null && !personWithUid.getId().equals(existingPerson.getId())) {
+                    JSONObject responseObject = new JSONObject();
+                    responseObject.put("error", "A person with uid '" + personDto.getUid() + "' already exists");
+                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
+                }
+                existingPerson.setUid(personDto.getUid());
+                changedFields.append("uid,");
+            }
+            if (sidChanged) {
+                existingPerson.setSid(personDto.getSid());
+                changedFields.append("sid,");
+            }
+
+            if (nameChanged) {
+                existingPerson.setName(personDto.getName());
+                changedFields.append("name,");
+            }
+            if (pfpChanged) {
+                existingPerson.setPfp(personDto.getPfp());
+                changedFields.append("pfp,");
+            }
+            if (kasmChanged) {
+                existingPerson.setKasmServerNeeded(personDto.getKasmServerNeeded());
+                changedFields.append("kasmServerNeeded,");
+            }
+            if (faceDataChanged) {
+                existingPerson.setFaceData(personDto.getFaceData());
+                changedFields.append("faceData,");
+                logger.info("Persisting faceData for user: {}. Length: {}", email, existingPerson.getFaceData().length());
+            }
+            // Save the updated person back to the repository
+            Person updatedPerson = repository.save(existingPerson);
+
+            String changed = changedFields.length() == 0
+                    ? "none"
+                    : changedFields.substring(0, changedFields.length() - 1);
+            logger.info("AUDIT profile_update actor={} target={} fields={} admin={}", email, updatedPerson.getUid(),
+                    changed, isAdmin);
+
+            // Return the updated person entity
+            return new ResponseEntity<>(updatedPerson, HttpStatus.OK);
+        }
+
+        // Return NOT_FOUND if person not found
+        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    }
+
     /**
      * Retrieves a Person entity by its ID.
      *
@@ -127,6 +325,7 @@ public class PersonApiController {
      *         NOT_FOUND status if not found.
      */
     @GetMapping("/person/uid/{uid}")
+    @PreAuthorize("hasAnyAuthority('ROLE_USER','ROLE_STUDENT','ROLE_TEACHER','ROLE_ADMIN')")
     public ResponseEntity<Person> getPersonByUid(@PathVariable String uid) {
         Person person = repository.findByUid(uid);
         if (person != null) {
@@ -383,191 +582,8 @@ public class PersonApiController {
     }
 
     /**
-     * Retrieves all Person entities that have face data registered.
-     * Returns a list of maps containing 'uid' and 'faceData'.
-     * 
-     * @return A ResponseEntity containing a list of maps with uid and faceData.
-     */
-    @GetMapping("/person/faces")
-    // Public for bathroom-pass face matcher (self-service). Security is via token/cookie in other workflows.
-    public ResponseEntity<List<Map<String, String>>> getPersonFaces() {
-        List<Person> people = repository.findByFaceDataIsNotNull();
-        List<Map<String, String>> faces = new ArrayList<>();
-        for (Person person : people) {
-            Map<String, String> face = new HashMap<>();
-            face.put("uid", person.getUid());
-            face.put("faceData", person.getFaceData());
-            faces.add(face);
-        }
-        return new ResponseEntity<>(faces, HttpStatus.OK);
-    }
-
-    /**
-     * Identify a person from the provided camera image using face data stored in Spring.
-     *
-     * This implementation now runs DeepFace through a local Python subprocess rather than proxying to Flask.
-     *
-     * @param body map containing "image" (base64) and optional "threshold"
-     * @return map containing match result or error
-     */
-    @PostMapping("/person/identify")
-    public ResponseEntity<Map<String, Object>> identifyPerson(@RequestBody Map<String, Object> body) {
-        String image = (String) body.get("image");
-        Double thresholdValue = 0.40; // Default threshold
-
-        if (body.containsKey("threshold")) {
-            Object thresholdObj = body.get("threshold");
-            if (thresholdObj instanceof Number) {
-                thresholdValue = ((Number) thresholdObj).doubleValue();
-            } else if (thresholdObj instanceof String) {
-                try {
-                    thresholdValue = Double.parseDouble((String) thresholdObj);
-                } catch (NumberFormatException e) {
-                    // Fall back to default
-                }
-            }
-        }
-
-        if (image == null || image.isEmpty()) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("match", false);
-            error.put("message", "No image provided");
-            return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
-        }
-
-        Map<String, Object> result = faceRecognitionService.identify(image, thresholdValue);
-        return new ResponseEntity<>(result, HttpStatus.OK);
-    }
-
-    /**
-     * Update a Person entity by its ID.
-     *
-     * 
-     * @param id        The ID of the Person entity to update.
-     * @param personDto The updated PersonDto object.
-     * @return A ResponseEntity containing the updated Person entity if found, or a
-     *         NOT_FOUND status if not found.
-     */
-    @PostMapping(value = "/person/update", produces = MediaType.APPLICATION_JSON_VALUE)
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Object> updatePerson(Authentication authentication, @RequestBody final PersonDto personDto) {
-        if (authentication == null || authentication.getPrincipal() == null) {
-            return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
-        }
-
-        // Get the email of the current user from the authentication context
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        String email = userDetails.getUsername(); // Assuming email is used as the username in Spring Security
-
-        // Find the person by email
-        Optional<Person> optionalPerson = Optional.ofNullable(repository.findByUid(email));
-        if (optionalPerson.isPresent()) {
-            Person existingPerson = optionalPerson.get();
-            boolean isAdmin = authentication.getAuthorities().stream()
-                    .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
-
-            boolean emailChanged = personDto.getEmail() != null
-                    && !personDto.getEmail().equals(existingPerson.getEmail());
-            boolean passwordChanged = personDto.getPassword() != null && !personDto.getPassword().isBlank();
-            boolean sidChanged = personDto.getSid() != null && !personDto.getSid().equals(existingPerson.getSid());
-            boolean nameChanged = personDto.getName() != null && !personDto.getName().equals(existingPerson.getName());
-            boolean pfpChanged = personDto.getPfp() != null && !personDto.getPfp().equals(existingPerson.getPfp());
-            boolean kasmChanged = personDto.getKasmServerNeeded() != null
-                    && !personDto.getKasmServerNeeded().equals(existingPerson.getKasmServerNeeded());
-            boolean uidChangeRequested = personDto.getUid() != null
-                    && !personDto.getUid().equals(existingPerson.getUid());
-            boolean faceDataChanged = personDto.getFaceData() != null
-                    && !personDto.getFaceData().equals(existingPerson.getFaceData());
-
-            if (!isAdmin && uidChangeRequested) {
-                logger.warn("AUDIT profile_update_blocked actor={} reason=uid_change_not_allowed",
-                        existingPerson.getUid());
-                JSONObject responseObject = new JSONObject();
-                responseObject.put("error", "UID cannot be changed through this endpoint");
-                return new ResponseEntity<>(responseObject.toString(), HttpStatus.FORBIDDEN);
-            }
-
-            if (!isAdmin && (emailChanged || passwordChanged)) {
-                if (personDto.getCurrentPassword() == null
-                        || personDto.getCurrentPassword().isBlank()
-                        || !passwordEncoder.matches(personDto.getCurrentPassword(), existingPerson.getPassword())) {
-                    logger.warn("AUDIT profile_update_blocked actor={} reason=invalid_current_password",
-                            existingPerson.getUid());
-                    JSONObject responseObject = new JSONObject();
-                    responseObject.put("error", "Current password is required for sensitive updates");
-                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.FORBIDDEN);
-                }
-            }
-
-            StringBuilder changedFields = new StringBuilder();
-
-            // Update fields only if they're provided in personDto
-            if (emailChanged) {
-                // Check if email is already taken by another person
-                Person personWithEmail = repository.findByEmail(personDto.getEmail());
-                if (personWithEmail != null && !personWithEmail.getId().equals(existingPerson.getId())) {
-                    JSONObject responseObject = new JSONObject();
-                    responseObject.put("error", "A person with email '" + personDto.getEmail() + "' already exists");
-                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
-                }
-                existingPerson.setEmail(personDto.getEmail());
-                changedFields.append("email,");
-            }
-            if (passwordChanged) {
-                existingPerson.setPassword(passwordEncoder.encode(personDto.getPassword()));
-                changedFields.append("password,");
-            }
-            if (isAdmin && uidChangeRequested) {
-                // Check if uid is already taken by another person
-                Person personWithUid = repository.findByUid(personDto.getUid());
-                if (personWithUid != null && !personWithUid.getId().equals(existingPerson.getId())) {
-                    JSONObject responseObject = new JSONObject();
-                    responseObject.put("error", "A person with uid '" + personDto.getUid() + "' already exists");
-                    return new ResponseEntity<>(responseObject.toString(), HttpStatus.CONFLICT);
-                }
-                existingPerson.setUid(personDto.getUid());
-                changedFields.append("uid,");
-            }
-            if (sidChanged) {
-                existingPerson.setSid(personDto.getSid());
-                changedFields.append("sid,");
-            }
-
-            if (nameChanged) {
-                existingPerson.setName(personDto.getName());
-                changedFields.append("name,");
-            }
-            if (pfpChanged) {
-                existingPerson.setPfp(personDto.getPfp());
-                changedFields.append("pfp,");
-            }
-            if (kasmChanged) {
-                existingPerson.setKasmServerNeeded(personDto.getKasmServerNeeded());
-                changedFields.append("kasmServerNeeded,");
-            }
-            if (faceDataChanged) {
-                existingPerson.setFaceData(personDto.getFaceData());
-                changedFields.append("faceData,");
-            }
-            // Save the updated person back to the repository
-            Person updatedPerson = repository.save(existingPerson);
-
-            String changed = changedFields.length() == 0
-                    ? "none"
-                    : changedFields.substring(0, changedFields.length() - 1);
-            logger.info("AUDIT profile_update actor={} target={} fields={} admin={}", email, updatedPerson.getUid(),
-                    changed, isAdmin);
-
-            // Return the updated person entity
-            return new ResponseEntity<>(updatedPerson, HttpStatus.OK);
-        }
-
-        // Return NOT_FOUND if person not found
-        return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-    }
-
-    /**
      * Search for a Person entity by name or email.
+
      * 
      * @param map of a key-value (k,v), the key is "term" and the value is the
      *            search term.
